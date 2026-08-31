@@ -81,6 +81,15 @@
 
   const PATCH_NOTES = [
     {
+      version: '1.3.1',
+      date: '2026-08-31',
+      title: '読み込み失敗の修正',
+      items: [
+        '更新後にブラウザが古いファイルを使い続けて、画面が真っ白になることがあったのを修正しました',
+        '万一読み込みに失敗したときは、白紙のままにせず理由と再読み込みボタンを出すようにしました'
+      ]
+    },
+    {
       version: '1.3.0',
       date: '2026-08-31',
       title: 'プレビューの既定変更・対案の見分け',
@@ -2680,12 +2689,38 @@
 
   /* ------------------------------------------------------------ 起動 */
 
-  load();
-  loadDevice();
-  loadColumns();
-  try { syncState.at = localStorage.getItem(LAST_SYNC_KEY) || null; } catch (e) {}
-  bind();
-  renderAll();
-  renderSyncPill();
-  renderPatchDot();
+  /**
+   * 起動に失敗したら、白紙のまま放置せず理由と対処を出す。
+   * index.html と app.js は別々にキャッシュされるので、版がずれると
+   * 「新しいHTMLに無い要素を古いJSが掴む」形で落ちうる。URLの ?v= で
+   * 防いではいるが、それでもすり抜けたときの最後の受け皿。
+   */
+  function bootError(e) {
+    try { console.error('LYRICLAB boot failed', e); } catch (err) {}
+    const box = document.createElement('div');
+    box.className = 'boot-error';
+    box.innerHTML =
+      '<p class="boot-error-title">読み込みに失敗しました</p>' +
+      '<p>保存されている古いファイルが混ざっている可能性があります。' +
+      '再読み込みしても直らない場合は、キャッシュを無視して再読み込み' +
+      '（Windows: Ctrl+Shift+R / Mac: Cmd+Shift+R）してください。</p>' +
+      '<button type="button" class="btn btn-primary btn-sm">再読み込み</button>' +
+      '<p class="boot-error-detail"></p>';
+    box.querySelector('button').addEventListener('click', () => location.reload());
+    box.querySelector('.boot-error-detail').textContent = String((e && e.message) || e || '');
+    document.body.appendChild(box);
+  }
+
+  try {
+    load();
+    loadDevice();
+    loadColumns();
+    try { syncState.at = localStorage.getItem(LAST_SYNC_KEY) || null; } catch (e) {}
+    bind();
+    renderAll();
+    renderSyncPill();
+    renderPatchDot();
+  } catch (e) {
+    bootError(e);
+  }
 })();

@@ -6,6 +6,9 @@
   <meta name="description" content="歌詞コライトを提案モード・コメントモードで共同作詞し、その作業ログから貢献パーセンテージを算出するスプリット管理アプリ。">
   <title>LYRICLAB — Lyric Co-write Split</title>
   <script>(function(){try{var t=localStorage.getItem('lyriclab_theme');if(!t)t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.dataset.theme=t;}catch(e){}})();</script>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Noto+Sans+JP:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
@@ -173,10 +176,12 @@
                 <button id="preview-toggle" type="button" class="btn btn-ghost btn-sm" title="プレビュー列を隠す">隠す</button>
               </div>
             </div>
-            <div id="preview-modes" class="mode-switch mb-3" role="tablist" aria-label="プレビュー表示">
-              <button type="button" class="mode-btn is-active" data-preview="clean">完成形</button>
-              <button type="button" class="mode-btn" data-preview="suggested">提案を反映</button>
-            </div>
+            <label class="switch mb-3" for="preview-suggested" title="切り替えると、いま確定している歌詞だけを表示します">
+              <input type="checkbox" id="preview-suggested" class="switch-input" checked>
+              <span class="switch-off">完成形</span>
+              <span class="switch-track"><span class="switch-thumb"></span></span>
+              <span class="switch-label">提案を反映</span>
+            </label>
             <div id="preview-doc" class="preview-doc"></div>
             <div id="preview-stats" class="preview-stats"></div>
           </section>
@@ -373,6 +378,7 @@
 
         <h3>提案とコメント</h3>
         <p>右のパネルで提案の採用・却下ができます。提案カードには質問や意見をコメントでき、コメントには返信できます。未解決のコメントは歌詞プレビューにも表示されます。</p>
+        <p>歌詞プレビューは既定で<b>提案を反映</b>した状態です。スイッチを切り替えると、いま確定している歌詞だけの「完成形」になります。提案は緑、対案は段数ぶん字下げした青の破線で表示され、行へのコメントと提案へのコメントも並びます。</p>
         <p><b>対案</b>を押すと、その提案にさらに案を重ねられます。下敷きは元の提案文なので、上から読むと推敲の流れになります。どれか1つを採用すると、同じ流れに残った案は「対案で解決」として自動的に閉じます。</p>
 
         <h3>セクションと呼び名</h3>

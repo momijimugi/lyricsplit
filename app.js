@@ -81,6 +81,17 @@
 
   const PATCH_NOTES = [
     {
+      version: '1.6.0',
+      date: '2026-08-31',
+      title: '接続先（ワークスペース）の切り替え',
+      items: [
+        '共作相手やチームごとに接続先を分けて持てるようになりました',
+        'ログインすると、前回使っていた接続先へ自動でつなぎます',
+        '接続設定から、接続先の追加・切り替え・名前変更・削除ができます',
+        '案件は接続先ごとに分かれ、別の接続先へ送られることはありません'
+      ]
+    },
+    {
       version: '1.4.0',
       date: '2026-08-31',
       title: 'Googleログイン（試験導入）',
@@ -274,6 +285,9 @@
     p.logs = Array.isArray(p.logs) ? p.logs : [];
     p.agreement = p.agreement || null;
     p.ai = p.ai || null;
+    // どの接続先の案件か。認証を入れる前からある案件は null のままで、
+    // 最初に接続したときにその接続先のものとして引き取る。
+    if (typeof p.workspaceId !== 'string') p.workspaceId = null;
     p.sections.forEach((s) => {
       if (typeof s.autoName !== 'boolean') s.autoName = false; // 旧データは名前固定として扱う
       if (!SECTION_KINDS[s.kind]) s.kind = 'other';
@@ -561,6 +575,26 @@
     const cfg = aiConfig();
     if (!$('cn-url').value) $('cn-url').value = cfg.url || '';
     $('connect-error').classList.add('hidden');
+
+    // 保存された接続先があれば、入力の前に一覧から選べるようにする。
+    const list = workspaceList();
+    const picker = $('connect-workspaces');
+    picker.classList.toggle('hidden', !list.length);
+    picker.innerHTML = list.length
+      ? '<p class="field-label">保存された接続先</p>' + list.map((w) =>
+          '<button type="button" class="ws-row" data-ws-connect="' + w.id + '">' +
+            '<span class="ws-row-label">' + esc(w.label || '名称未設定') + '</span>' +
+            '<span class="ws-row-go">接続</span>' +
+          '</button>').join('') +
+        '<p class="ws-or">または、新しい接続先を追加</p>'
+      : '';
+    // 1件目は名前を聞く（既定は「メイン」）。2件目以降も同じ欄で名前を付ける。
+    $('cn-label').placeholder = list.length ? '例：Aさんとの共作' : 'メイン';
+    // 自動復元がうまくいかなかったときだけ、その理由をここに出す。
+    const notice = $('connect-notice');
+    notice.textContent = restoreNotice ? restoreNotice.text : '';
+    notice.classList.toggle('hidden', !restoreNotice);
+    notice.classList.toggle('is-firestore', !!restoreNotice && restoreNotice.kind === 'firestore');
     const submit = $('connect-submit');
     submit.disabled = false;
     submit.textContent = '接続して開く';
@@ -594,8 +628,18 @@
       renderSyncPill();
       return;
     }
+    // ここまで来たら接続は通っている。接続先として登録する。
+    const label = ($('cn-label').value || '').trim() || (workspaceList().length ? '接続先' : 'メイン');
+    const id = newWorkspaceId();
+    upsertWorkspace(id, { label: label, gasUrl: url, gasKey: key, model: cfg.model || AI_DEFAULT_MODEL });
+    wsDoc.activeWorkspaceId = id;
+    claimUntaggedProjects(id);
+    await persistWorkspaces();
+
     setLocalOnly(false);
+    restoreNotice = null;
     $('cn-key').value = '';
+    $('cn-label').value = '';
     ui.view = 'dashboard';
     renderSyncPill();
     renderAll();
@@ -604,16 +648,18 @@
   }
 
   function renderDashboard() {
-    const lines = projects.reduce((a, p) => a + p.sections.reduce((b, s) => b + s.lines.length, 0), 0);
-    const open = projects.reduce((a, p) => a + p.suggestions.filter((s) => s.status === 'open').length, 0);
-    const logs = projects.reduce((a, p) => a + p.logs.length, 0);
-    $('stat-projects').textContent = projects.length;
+    // 別の接続先の案件は混ぜて見せない。
+    const shown = visibleProjects();
+    const lines = shown.reduce((a, p) => a + p.sections.reduce((b, s) => b + s.lines.length, 0), 0);
+    const open = shown.reduce((a, p) => a + p.suggestions.filter((s) => s.status === 'open').length, 0);
+    const logs = shown.reduce((a, p) => a + p.logs.length, 0);
+    $('stat-projects').textContent = shown.length;
     $('stat-lines').textContent = lines;
     $('stat-suggestions').textContent = open;
     $('stat-logs').textContent = logs;
 
     const grid = $('project-grid');
-    const sorted = projects.slice().sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+    const sorted = shown.slice().sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
     grid.innerHTML = sorted.map((p) => {
       const res = analyze(p);
       const shares = p.agreement || res.percent;
@@ -634,8 +680,8 @@
           '<span class="line-badge">' + esc(p.status || '作詞中') + '</span></div>' +
       '</button>';
     }).join('');
-    $('empty-projects').classList.toggle('hidden', projects.length > 0);
-    grid.classList.toggle('hidden', projects.length === 0);
+    $('empty-projects').classList.toggle('hidden', shown.length > 0);
+    grid.classList.toggle('hidden', shown.length === 0);
   }
 
   function renderProject() {
@@ -1312,7 +1358,8 @@
       suggestions: [],
       comments: [],
       logs: [],
-      agreement: null
+      agreement: null,
+      workspaceId: activeWorkspaceId()
     });
     projects.push(p);
     ui.projectId = p.id;
@@ -1981,6 +2028,34 @@
     '</div>';
   }
 
+  // 「新しい接続先を追加」を押しているあいだだけ true。保存が追加になる。
+  let wsAddMode = false;
+
+  function renderWorkspaceManager() {
+    const box = $('ws-manager');
+    const list = workspaceList();
+    // 認証を使っていない（＝接続先を保存できない）ときは、この欄ごと出さない。
+    box.classList.toggle('hidden', !cloud());
+    if (!cloud()) return;
+
+    const activeId = wsDoc.activeWorkspaceId;
+    $('ws-list').innerHTML = list.length
+      ? list.map((w) =>
+          '<button type="button" class="ws-row' + (w.id === activeId ? ' is-active' : '') + '" data-ws-switch="' + w.id + '">' +
+            '<span class="ws-row-label">' + esc(w.label || '名称未設定') + '</span>' +
+            '<span class="ws-row-go">' + (w.id === activeId ? '接続中' : '切り替え') + '</span>' +
+          '</button>').join('')
+      : '<p class="ws-note">まだ接続先がありません。下の欄から追加してください。</p>';
+
+    const act = activeWorkspace();
+    $('ws-label').value = wsAddMode ? '' : (act ? act.label || '' : '');
+    $('ws-label').placeholder = wsAddMode ? '新しい接続先の名前' : 'この接続先の名前';
+    $('ws-rename').classList.toggle('hidden', wsAddMode || !act);
+    $('ws-delete').classList.toggle('hidden', wsAddMode || !act);
+    $('ws-add').textContent = wsAddMode ? '追加をやめる' : '＋ 新しい接続先を追加';
+    $('ws-add-note').classList.toggle('hidden', !wsAddMode);
+  }
+
   function openAiModal() {
     const cfg = aiConfig();
     $('ai-gas-url').value = cfg.url || '';
@@ -1994,6 +2069,7 @@
 
   function setAiProvider(provider) {
     Array.from($('ai-provider-tabs').children).forEach((b) => b.classList.toggle('is-active', b.dataset.provider === provider));
+    renderWorkspaceManager();
     $('ai-gas-fields').classList.toggle('hidden', provider !== 'gas');
     $('ai-gemini-fields').classList.toggle('hidden', provider !== 'gemini');
   }
@@ -2027,6 +2103,208 @@
   function needsConnect() {
     return !syncReady() && !localOnly();
   }
+
+  /* ------------------------------------------ ワークスペース（接続先）
+     1人のユーザーが、共作相手やチームごとに別々のApps Script接続先を持てる。
+     Firestore の users/{uid}/appSettings/lyricsplit に、
+
+       { activeWorkspaceId, workspaces: { <wsId>: { label, gasUrl, gasKey, model, updatedAt } } }
+
+     の形で1件だけ置く。接続情報をユーザー直下にベタ書きせず「ワークスペース」を
+     挟んでおくのは、将来ここを共有ワークスペース（1つの接続先に複数ユーザーが参加）
+     へ移すときに、workspaces を別コレクションへ引き上げるだけで済むようにするため。
+
+     Gemini APIキーはここには入れない（Apps Script の Script Properties 側で持つ）。
+     認証を使わない場合は cloud() が null になり、これまで通り
+     localStorage / sessionStorage だけの単一接続として動く。 */
+
+  const cloud = () => {
+    const s = window.LYRICLAB_AUTH && window.LYRICLAB_AUTH.settings;
+    return s && s.available ? s : null;
+  };
+
+  // Firestoreから読んだ内容の控え。ログアウトや未ログインのときは空。
+  let wsDoc = { activeWorkspaceId: null, workspaces: {} };
+
+  const workspaceList = () => Object.keys(wsDoc.workspaces)
+    .map((id) => Object.assign({ id: id }, wsDoc.workspaces[id]))
+    .sort((a, b) => String(a.label || '').localeCompare(String(b.label || ''), 'ja'));
+  const activeWorkspace = () => wsDoc.workspaces[wsDoc.activeWorkspaceId] || null;
+  const activeWorkspaceId = () => (activeWorkspace() ? wsDoc.activeWorkspaceId : null);
+
+  // 復元に失敗した理由。接続画面の上に出す。Firestore由来かApps Script由来かを分ける。
+  let restoreNotice = null;
+
+  /** ワークスペースIDは名前と切り離した内部ID。名前を変えてもIDは変わらない。 */
+  const newWorkspaceId = () => uid('ws');
+
+  /** ワークスペースの接続情報を、この端末の接続設定として適用する。 */
+  function applyWorkspace(ws) {
+    const cfg = aiConfig();
+    saveAiConfig({
+      provider: 'gas',
+      url: ws.gasUrl,
+      model: ws.model || cfg.model || AI_DEFAULT_MODEL,
+      gasKey: ws.gasKey,
+      geminiKey: cfg.geminiKey || ''
+    });
+  }
+
+  /** 打ち間違いを保存しないよう、実際に通信して確かめる。 */
+  async function testConnection() {
+    await gasPost('pull', null, 20000);
+  }
+
+  /** 接続に失敗したら、鍵を持ち越さない。 */
+  function dropConnection() {
+    try { sessionStorage.removeItem(AI_SECRET_KEY); } catch (e) {}
+  }
+
+  async function persistWorkspaces() {
+    const store = cloud();
+    if (!store) return { ok: true };
+    const res = await store.save(wsDoc);
+    if (!res.ok) toast('接続先をアカウントに保存できませんでした');
+    return res;
+  }
+
+  /**
+   * まだどの接続先のものでもない案件を、いま使っている接続先のものとして扱う。
+   * 認証を入れる前から端末にあった案件や、未接続で作った案件が対象。
+   */
+  function claimUntaggedProjects(wsId) {
+    if (!wsId) return;
+    let changed = 0;
+    projects.forEach((p) => {
+      if (!p.workspaceId) { p.workspaceId = wsId; changed++; }
+    });
+    if (changed) save();
+  }
+
+  /** いまの接続先に属する案件だけ。接続先が無いときは未所属のものを見せる。 */
+  function visibleProjects() {
+    const wsId = activeWorkspaceId();
+    if (!wsId) return projects.filter((p) => !p.workspaceId);
+    return projects.filter((p) => p.workspaceId === wsId || !p.workspaceId);
+  }
+
+  /** ワークスペースを1件足して、それを現在の接続先にする。接続確認は呼ぶ側で済ませておく。 */
+  function upsertWorkspace(id, data) {
+    wsDoc.workspaces[id] = Object.assign({}, wsDoc.workspaces[id], data, { updatedAt: nowISO() });
+    return wsDoc.workspaces[id];
+  }
+
+  /**
+   * 接続先を切り替える。前の接続先の案件を新しい接続先へ送ってしまわないよう、
+   * 案件は workspaceId で分けてあり、同期は現在の接続先のぶんだけを送る。
+   */
+  async function switchWorkspace(id) {
+    const ws = wsDoc.workspaces[id];
+    if (!ws) return { ok: false };
+    const before = wsDoc.activeWorkspaceId;
+    applyWorkspace(ws);
+    try {
+      await testConnection();
+    } catch (e) {
+      dropConnection();
+      if (before && wsDoc.workspaces[before]) applyWorkspace(wsDoc.workspaces[before]);
+      toast('「' + (ws.label || '接続先') + '」に接続できませんでした');
+      restoreNotice = { kind: 'gas', text: connectionFailedText(e) };
+      renderAll();
+      return { ok: false, reason: 'gas', error: e };
+    }
+    wsDoc.activeWorkspaceId = id;
+    restoreNotice = null;
+    setLocalOnly(false);
+    await persistWorkspaces();
+    ui.view = 'dashboard';
+    renderSyncPill();
+    renderAll();
+    toast('接続先を「' + (ws.label || '') + '」に切り替えました');
+    syncNow();
+    return { ok: true };
+  }
+
+  function connectionFailedText(e) {
+    return '保存された接続設定では接続できませんでした（Apps Script）。' +
+      'デプロイをやり直した場合は、新しいURLと接続キーを入れ直してください。\n' +
+      ((e && e.message) || String(e));
+  }
+
+  /** 接続先を消す。Firestoreの設定だけを消し、端末の案件には触れない。 */
+  async function deleteWorkspace(id) {
+    const ws = wsDoc.workspaces[id];
+    if (!ws) return;
+    delete wsDoc.workspaces[id];
+    if (wsDoc.activeWorkspaceId === id) {
+      // 使っていた接続先を消したときは、残りの1つへ移るか、未接続へ戻す。
+      const rest = workspaceList();
+      wsDoc.activeWorkspaceId = rest.length ? rest[0].id : null;
+      dropConnection();
+      try { localStorage.removeItem(AI_CFG_KEY); } catch (e) {}
+      if (wsDoc.activeWorkspaceId) applyWorkspace(wsDoc.workspaces[wsDoc.activeWorkspaceId]);
+    }
+    await persistWorkspaces();
+    renderSyncPill();
+    renderAll();
+    toast('接続先「' + (ws.label || '') + '」を削除しました（案件データは残しています）');
+  }
+
+  /**
+   * auth.js から呼ばれる橋渡し。
+   * ログイン直後に、保存してある接続先でつなぎ直す。
+   * 通らなければ従来の接続画面（または接続先の一覧）へ戻す。
+   */
+  window.LYRICLAB_APP = {
+    isConnected: () => syncReady() && !!activeWorkspaceId(),
+
+    /** ログアウト時。端末の鍵は残さない。 */
+    reset() {
+      wsDoc = { activeWorkspaceId: null, workspaces: {} };
+      restoreNotice = null;
+    },
+
+    restoreFailed(kind, detail) {
+      restoreNotice = kind === 'firestore'
+        ? { kind: 'firestore', text: '保存された接続先を読み込めませんでした（Firestore）。お手数ですが、下の欄から接続してください。' + (detail ? '\n' + detail : '') }
+        : { kind: 'gas', text: String(detail || '') };
+      if (ui.view === 'connect') renderConnect();
+    },
+
+    async restoreConnection(doc) {
+      wsDoc = {
+        activeWorkspaceId: (doc && doc.activeWorkspaceId) || null,
+        workspaces: (doc && doc.workspaces) || {}
+      };
+      const ws = activeWorkspace();
+      if (!ws) {
+        // 接続先が1件も無い、または activeWorkspaceId が壊れている。
+        if (workspaceList().length) wsDoc.activeWorkspaceId = null;
+        renderAll();
+        return { ok: false, reason: 'none' };
+      }
+      applyWorkspace(ws);
+      try {
+        await testConnection();
+      } catch (e) {
+        dropConnection();
+        restoreNotice = { kind: 'gas', text: connectionFailedText(e) };
+        renderSyncPill();
+        renderAll();
+        return { ok: false, reason: 'gas' };
+      }
+      claimUntaggedProjects(wsDoc.activeWorkspaceId);
+      restoreNotice = null;
+      setLocalOnly(false);
+      ui.view = 'dashboard';
+      renderSyncPill();
+      renderAll();
+      toast('「' + (ws.label || '接続先') + '」に接続しました');
+      syncNow();
+      return { ok: true };
+    }
+  };
+
   const syncState = { busy: false, error: null, at: null };
 
   /** Apps Script へのPOST。プリフライトを避けるためform-encodedで送る。 */
@@ -2105,18 +2383,33 @@
       const remoteById = {};
       remote.forEach((r) => { if (r && r.id) remoteById[r.id] = r; });
 
+      // いま接続している接続先。受信した案件はこの接続先のものとして印を付け、
+      // 送信もこの接続先の案件だけに絞る。これをしないと、接続先を切り替えたときに
+      // 別チームの案件を相手のシートへ送ってしまう。
+      const wsId = activeWorkspaceId();
+
       let added = 0;
       let updated = 0;
       remote.forEach((r) => {
         const local = projects.find((p) => p.id === r.id);
-        if (!local) { projects.push(normalizeProject(r)); added++; return; }
+        if (!local) {
+          const np = normalizeProject(r);
+          np.workspaceId = wsId;
+          projects.push(np);
+          added++;
+          return;
+        }
         if (String(r.updatedAt || '') > String(local.updatedAt || '')) {
           Object.assign(local, normalizeProject(r));
+          local.workspaceId = wsId;
           updated++;
         }
       });
 
       const toPush = projects.filter((p) => {
+        // 他の接続先の案件は送らない。未所属の案件はここで引き取る。
+        if (p.workspaceId && p.workspaceId !== wsId) return false;
+        if (!p.workspaceId) p.workspaceId = wsId;
         const r = remoteById[p.id];
         return !r || String(p.updatedAt || '') > String(r.updatedAt || '');
       });
@@ -2171,6 +2464,42 @@
     $('sync-pill').addEventListener('click', openAiModal);
 
     $('connect-form').addEventListener('submit', (e) => { e.preventDefault(); submitConnect(); });
+
+    // 接続画面から、保存済みの接続先を選んでつなぐ。
+    $('connect-workspaces').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-ws-connect]');
+      if (b) switchWorkspace(b.dataset.wsConnect);
+    });
+
+    // 接続設定モーダルの接続先まわり。
+    $('ws-list').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-ws-switch]');
+      if (!b || b.dataset.wsSwitch === wsDoc.activeWorkspaceId) return;
+      closeModal('ai-modal');
+      switchWorkspace(b.dataset.wsSwitch);
+    });
+    $('ws-add').addEventListener('click', () => {
+      wsAddMode = !wsAddMode;
+      if (wsAddMode) { $('ai-gas-url').value = ''; $('ai-gas-key').value = ''; }
+      else { const cfg = aiConfig(); $('ai-gas-url').value = cfg.url || ''; $('ai-gas-key').value = cfg.gasKey || ''; }
+      renderWorkspaceManager();
+    });
+    $('ws-rename').addEventListener('click', async () => {
+      const act = activeWorkspace();
+      const label = $('ws-label').value.trim();
+      if (!act || !label) return;
+      // 名前は接続に関係しないので、接続確認なしで保存してよい。
+      upsertWorkspace(wsDoc.activeWorkspaceId, { label: label });
+      await persistWorkspaces();
+      renderWorkspaceManager();
+      toast('接続先の名前を変えました');
+    });
+    $('ws-delete').addEventListener('click', () => {
+      const act = activeWorkspace();
+      if (!act) return;
+      if (!confirm('接続先「' + (act.label || '') + '」を削除します。\n端末の案件データは消えません。よろしいですか？')) return;
+      deleteWorkspace(wsDoc.activeWorkspaceId).then(() => { closeModal('ai-modal'); });
+    });
     $('connect-skip').addEventListener('click', () => {
       setLocalOnly(true);
       ui.view = 'dashboard';
@@ -2512,7 +2841,7 @@
       const b = e.target.closest('[data-provider]');
       if (b) setAiProvider(b.dataset.provider);
     });
-    $('ai-form').addEventListener('submit', (e) => {
+    $('ai-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const provider = currentAiProvider();
       const cfg = {
@@ -2528,15 +2857,51 @@
         err.classList.remove('hidden');
         return;
       }
+
+      const before = aiConfig();
       saveAiConfig(cfg);
+
+      // 接続先を保存できる状態でApps Scriptを使うときは、通ることを確かめてから預ける。
+      // 打ち間違ったURLや鍵をFirestoreに残さないため。
+      if (cloud() && provider === 'gas') {
+        err.classList.add('hidden');
+        try {
+          await testConnection();
+        } catch (e2) {
+          saveAiConfig(before); // 元の接続に戻す
+          err.textContent = (e2 && e2.message) || String(e2);
+          err.classList.remove('hidden');
+          renderSyncPill();
+          return;
+        }
+        if (wsAddMode || !activeWorkspace()) {
+          const id = newWorkspaceId();
+          const label = $('ws-label').value.trim() || '接続先';
+          upsertWorkspace(id, { label: label, gasUrl: cfg.url, gasKey: cfg.gasKey, model: cfg.model });
+          wsDoc.activeWorkspaceId = id;
+          claimUntaggedProjects(id);
+          wsAddMode = false;
+        } else {
+          upsertWorkspace(wsDoc.activeWorkspaceId, { gasUrl: cfg.url, gasKey: cfg.gasKey, model: cfg.model });
+        }
+        await persistWorkspaces();
+      }
+
       closeModal('ai-modal');
       renderSyncPill();
       renderAll();
       toast('接続設定を保存しました');
     });
-    $('ai-clear').addEventListener('click', () => {
+
+    $('ai-clear').addEventListener('click', async () => {
       try { localStorage.removeItem(AI_CFG_KEY); sessionStorage.removeItem(AI_SECRET_KEY); } catch (err) {}
+      // いま使っている接続先を、アカウント側からも消す。案件データには触れない。
+      if (cloud() && activeWorkspace()) {
+        await deleteWorkspace(wsDoc.activeWorkspaceId);
+      }
       setLocalOnly(false);
+      restoreNotice = null;
+      wsAddMode = false;
       closeModal('ai-modal');
       renderSyncPill();
       renderAll();

@@ -15,7 +15,7 @@
    これまで通りログインなしで使える状態を保つ。
    ========================================================================== */
 
-import { firebaseConfig, isFirebaseConfigured } from './firebase-config.js?v=1.6.0';
+import { firebaseConfig, isFirebaseConfigured } from './firebase-config.js?v=1.7.0';
 
 // Firebase公式のブラウザ向けES Modules。ビルド環境は使わない。
 // 版を上げるときは3か所ともそろえること。

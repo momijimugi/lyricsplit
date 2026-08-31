@@ -61,6 +61,7 @@
     'suggest.accept':  { label: '提案を採用',     points: 1 },
     'suggest.reject':  { label: '提案を却下',     points: 0.5 },
     'suggest.comment': { label: '提案へコメント', points: 1 },
+    'suggest.counter':  { label: '対案を出す',     points: 2 },
     'comment.create':  { label: 'コメント',       points: 1.5 },
     'comment.reply':   { label: '返信',           points: 1 },
     'comment.resolve': { label: 'コメント解決',   points: 0.5 },
@@ -70,6 +71,77 @@
 
   // 最終比率の配合。データが無い軸は自動的に他の軸へ按分される。
   const AXIS_WEIGHTS = { text: 0.55, adopted: 0.20, involvement: 0.25 };
+
+  /* ------------------------------------------------------------ 更新履歴
+     先頭が最新。version を上げると「新着」の点が付き、開くと消える。
+     新しい版を出すときは、ここの先頭に1ブロック足すだけでよい。 */
+
+  const PATCH_KEY = 'lyriclab_patch_seen';
+
+  const PATCH_NOTES = [
+    {
+      version: '1.2.0',
+      date: '2026-08-31',
+      title: '提案への対案・更新履歴',
+      items: [
+        '提案にさらに提案を重ねられるようにしました（対案）。推敲の流れが親子で並びます',
+        '採用すると、同じ流れに残った案は「対案で解決」として自動で閉じます',
+        'この更新履歴を追加しました。新しい版が出るとボタンに点が付きます',
+        'スプリット比率のバーが横に伸びすぎないよう幅を調整しました',
+        '「?」ボタンの高さが隣のボタンと揃っていなかったのを修正しました'
+      ]
+    },
+    {
+      version: '1.1.0',
+      date: '2026-08-31',
+      title: '起動時の接続・提案へのコメント',
+      items: [
+        '未接続で起動したとき、先に接続する画面を出すようにしました',
+        '接続に失敗した理由を画面に出すようにしました（CORSブロックを含む）',
+        '提案カードにコメントできるようにしました',
+        '未解決のコメントを歌詞プレビューにも表示するようにしました',
+        '案件の情報とスプリット比率を上部のバーにまとめ、歌詞エディタを縦に広げました',
+        'セクションの呼び名の切り替えを、案件の編集内に移しました',
+        '「?」ボタンからヘルプを開けるようにしました'
+      ]
+    },
+    {
+      version: '1.0.0',
+      date: '2026-08-31',
+      title: '最初の版',
+      items: [
+        '編集・提案・コメントの3モードで共同作詞できます',
+        '作業ログから貢献パーセンテージを算出します',
+        'スプレッドシート同期とAI分析に対応しています'
+      ]
+    }
+  ];
+
+  const PATCH_LATEST = PATCH_NOTES[0].version;
+
+  function patchSeen() {
+    try { return localStorage.getItem(PATCH_KEY) || ''; } catch (e) { return ''; }
+  }
+
+  function renderPatchDot() {
+    $('patch-dot').classList.toggle('hidden', patchSeen() === PATCH_LATEST);
+  }
+
+  function openPatchNotes() {
+    $('patch-doc').innerHTML = PATCH_NOTES.map((n, i) =>
+      '<section class="patch-entry">' +
+        '<div class="patch-head">' +
+          '<span class="patch-version">v' + esc(n.version) + '</span>' +
+          '<span class="patch-title">' + esc(n.title) + '</span>' +
+          (i === 0 && patchSeen() !== PATCH_LATEST ? '<span class="line-badge is-suggest">新着</span>' : '') +
+          '<span class="patch-date">' + esc(n.date) + '</span>' +
+        '</div>' +
+        '<ul>' + n.items.map((t) => '<li>' + esc(t) + '</li>').join('') + '</ul>' +
+      '</section>').join('');
+    openModal('patch-modal');
+    try { localStorage.setItem(PATCH_KEY, PATCH_LATEST); } catch (e) {}
+    renderPatchDot();
+  }
 
   /* ---------------------------------------------------------------- 状態 */
 
@@ -87,6 +159,7 @@
     composer: null,   // { sectionId, lineId|null, mode, kind }
     replyTo: null,    // comment id
     sugReplyTo: null, // suggestion id（提案へのコメント入力を開いている対象）
+    sugCounterTo: null, // suggestion id（対案の入力を開いている対象）
     exportTab: 'lyrics'
   };
 
@@ -139,6 +212,7 @@
     });
     (p.suggestions || []).forEach((s) => {
       ids.push(s && s.id);
+      if (s && s.parentId) ids.push(s.parentId);
       (s && s.replies || []).forEach((r) => ids.push(r && r.id));
     });
     (p.comments || []).forEach((c) => {
@@ -157,7 +231,10 @@
     });
     p.sections = Array.isArray(p.sections) ? p.sections : [];
     p.suggestions = Array.isArray(p.suggestions) ? p.suggestions : [];
-    p.suggestions.forEach((s) => { s.replies = Array.isArray(s.replies) ? s.replies : []; });
+    p.suggestions.forEach((s) => {
+      s.replies = Array.isArray(s.replies) ? s.replies : [];
+      if (typeof s.parentId !== 'string') s.parentId = null; // 旧データは全て根
+    });
     p.comments = Array.isArray(p.comments) ? p.comments : [];
     p.logs = Array.isArray(p.logs) ? p.logs : [];
     p.agreement = p.agreement || null;
@@ -924,47 +1001,127 @@
     return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
   }
 
+  /* 提案は親子でつながる。「この案にさらに案を重ねる」＝対案。
+     子の baseText は親の提案文なので、チェーンを上から読むと推敲の流れになる。 */
+
+  /** 対案の下敷きになる文。削除提案には提案文が無いので元の行を使う。 */
+  function counterBase(sug) {
+    return sug.kind === 'delete' ? sug.baseText : sug.text;
+  }
+
+  /** sug を根まで辿る。 */
+  function suggestionChain(p, sug) {
+    const chain = [];
+    let cur = sug;
+    const seen = {};
+    while (cur && !seen[cur.id]) {
+      seen[cur.id] = true;
+      chain.unshift(cur);
+      cur = cur.parentId ? p.suggestions.find((x) => x.id === cur.parentId) : null;
+    }
+    return chain;
+  }
+
+  /** sug の子孫をすべて集める。 */
+  function suggestionDescendants(p, id) {
+    const out = [];
+    const walk = (parentId) => {
+      p.suggestions.filter((x) => x.parentId === parentId).forEach((child) => {
+        out.push(child);
+        walk(child.id);
+      });
+    };
+    walk(id);
+    return out;
+  }
+
+  /** 根の提案を新しい順に並べる（未処理を上に）。 */
+  function rootSuggestions(p) {
+    const roots = p.suggestions.filter((s) => !s.parentId || !p.suggestions.some((x) => x.id === s.parentId));
+    return roots.sort((a, b) =>
+      (openInTree(p, a) ? 0 : 1) - (openInTree(p, b) ? 0 : 1) ||
+      String(b.createdAt).localeCompare(String(a.createdAt)));
+  }
+
+  /** チェーンのどこかに未処理が残っているか。 */
+  function openInTree(p, sug) {
+    if (sug.status === 'open') return true;
+    return suggestionDescendants(p, sug.id).some((x) => x.status === 'open');
+  }
+
   function renderSuggestions(p) {
-    const list = p.suggestions.slice().sort((a, b) => (a.status === 'open' ? -1 : 1) - (b.status === 'open' ? -1 : 1) || String(b.createdAt).localeCompare(String(a.createdAt)));
-    if (!list.length) { $('panel-suggestions').innerHTML = '<div class="empty-note">提案はまだありません。提案モードで行をクリックすると書き換え案を出せます。</div>'; return; }
-    $('panel-suggestions').innerHTML = list.map((s) => {
-      const badge = s.status === 'open' ? '<span class="line-badge is-suggest">未処理</span>'
-        : s.status === 'accepted' ? '<span class="line-badge" style="border-color:var(--success);color:var(--success)">採用</span>'
-        : '<span class="line-badge" style="border-color:var(--danger);color:var(--danger)">却下</span>';
-      const body = s.kind === 'delete'
-        ? '<p class="text-xs"><span class="diff-old">' + esc(s.baseText) + '</span></p>'
-        : s.kind === 'insert'
-          ? '<p class="text-xs"><span class="diff-new">＋ ' + esc(s.text) + '</span></p>'
-          : '<p class="text-xs leading-6"><span class="diff-old">' + esc(s.baseText) + '</span><br><span class="diff-new">' + esc(s.text) + '</span></p>';
-      // 提案そのものへのやりとり（採用前の質問・意見）。
-      const notes = (s.replies || []).map((r) =>
-        '<div class="thread-item"><div class="card-head">' + avatarHTML(p, r.authorId) +
-        '<span class="card-time">' + fmtTime(r.createdAt) + '</span></div>' +
-        '<p class="text-xs leading-5">' + esc(r.text) + '</p></div>').join('');
-      const noteBox = ui.sugReplyTo === s.id
-        ? '<div class="composer"><textarea id="sug-comment-input" rows="2" placeholder="この提案へのコメント"></textarea>' +
-          '<div class="composer-actions"><button type="button" class="btn btn-primary btn-sm" data-sug-comment-send="' + s.id + '">コメントする</button>' +
-          '<button type="button" class="btn btn-ghost btn-sm" data-sug-comment-cancel="1">キャンセル</button></div></div>'
-        : '';
-      const actionBtns = [];
-      if (s.status === 'open') {
-        actionBtns.push('<button type="button" class="btn btn-primary btn-sm" data-sug-accept="' + s.id + '">採用</button>');
-        actionBtns.push('<button type="button" class="btn btn-ghost btn-sm" data-sug-reject="' + s.id + '">却下</button>');
+    const roots = rootSuggestions(p);
+    if (!roots.length) {
+      $('panel-suggestions').innerHTML = '<div class="empty-note">提案はまだありません。提案モードで行をクリックすると書き換え案を出せます。</div>';
+      return;
+    }
+    $('panel-suggestions').innerHTML = roots.map((s) => renderSuggestionTree(p, s, 0)).join('');
+  }
+
+  /** 提案1件と、それに重ねられた対案を入れ子で描く。 */
+  function renderSuggestionTree(p, s, depth) {
+    const children = p.suggestions
+      .filter((x) => x.parentId === s.id)
+      .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+    return renderSuggestionCard(p, s, depth) +
+      (children.length
+        ? '<div class="sug-children">' + children.map((c) => renderSuggestionTree(p, c, depth + 1)).join('') + '</div>'
+        : '');
+  }
+
+  function renderSuggestionCard(p, s, depth) {
+    const badge = s.status === 'open' ? '<span class="line-badge is-suggest">未処理</span>'
+      : s.status === 'accepted' ? '<span class="line-badge" style="border-color:var(--success);color:var(--success)">採用</span>'
+      : s.status === 'superseded' ? '<span class="line-badge">対案で解決</span>'
+      : '<span class="line-badge" style="border-color:var(--danger);color:var(--danger)">却下</span>';
+    const counterTag = depth ? '<span class="line-badge">対案</span>' : '';
+    const body = s.kind === 'delete'
+      ? '<p class="text-xs"><span class="diff-old">' + esc(s.baseText) + '</span></p>'
+      : s.kind === 'insert' && !depth
+        ? '<p class="text-xs"><span class="diff-new">＋ ' + esc(s.text) + '</span></p>'
+        : '<p class="text-xs leading-6"><span class="diff-old">' + esc(s.baseText) + '</span><br><span class="diff-new">' + esc(s.text) + '</span></p>';
+
+    const notes = (s.replies || []).map((r) =>
+      '<div class="thread-item"><div class="card-head">' + avatarHTML(p, r.authorId) +
+      '<span class="card-time">' + fmtTime(r.createdAt) + '</span></div>' +
+      '<p class="text-xs leading-5">' + esc(r.text) + '</p></div>').join('');
+    const noteBox = ui.sugReplyTo === s.id
+      ? '<div class="composer"><textarea id="sug-comment-input" rows="2" placeholder="この提案へのコメント"></textarea>' +
+        '<div class="composer-actions"><button type="button" class="btn btn-primary btn-sm" data-sug-comment-send="' + s.id + '">コメントする</button>' +
+        '<button type="button" class="btn btn-ghost btn-sm" data-sug-comment-cancel="1">キャンセル</button></div></div>'
+      : '';
+    const counterBox = ui.sugCounterTo === s.id
+      ? '<div class="composer"><span class="composer-label">対案 · ' + esc((actor() || {}).name || '') + '</span>' +
+        '<textarea id="sug-counter-input" rows="2" placeholder="この案をさらに書き換える">' + esc(counterBase(s)) + '</textarea>' +
+        '<div class="composer-actions"><button type="button" class="btn btn-primary btn-sm" data-sug-counter-send="' + s.id + '">対案を出す</button>' +
+        '<button type="button" class="btn btn-ghost btn-sm" data-sug-counter-cancel="1">キャンセル</button></div></div>'
+      : '';
+
+    const actionBtns = [];
+    if (s.status === 'open') {
+      actionBtns.push('<button type="button" class="btn btn-primary btn-sm" data-sug-accept="' + s.id + '">採用</button>');
+      actionBtns.push('<button type="button" class="btn btn-ghost btn-sm" data-sug-reject="' + s.id + '">却下</button>');
+      if (ui.sugCounterTo !== s.id) {
+        actionBtns.push('<button type="button" class="btn btn-ghost btn-sm" data-sug-counter-open="' + s.id + '">対案</button>');
       }
-      if (ui.sugReplyTo !== s.id) {
-        actionBtns.push('<button type="button" class="btn btn-ghost btn-sm" data-sug-comment-open="' + s.id + '">コメント' +
-          ((s.replies || []).length ? ' ' + s.replies.length : '') + '</button>');
-      }
-      const resolvedNote = s.status === 'open' ? ''
-        : '<p class="mt-1.5 font-mono text-[9px] text-slate-500">' + esc(memberName(p, s.resolvedBy)) + ' が' + (s.status === 'accepted' ? '採用' : '却下') + '</p>';
-      return '<div class="card">' +
-        '<div class="card-head">' + avatarHTML(p, s.authorId) + badge +
-        '<span class="card-time">' + fmtTime(s.createdAt) + '</span></div>' +
-        '<p class="mb-1 font-mono text-[9px] text-slate-500">' + esc(sectionNameOf(p, s.sectionId)) + '</p>' +
-        body + resolvedNote + notes + noteBox +
-        '<div class="composer-actions">' + actionBtns.join('') + '</div>' +
-      '</div>';
-    }).join('');
+    }
+    if (ui.sugReplyTo !== s.id) {
+      actionBtns.push('<button type="button" class="btn btn-ghost btn-sm" data-sug-comment-open="' + s.id + '">コメント' +
+        ((s.replies || []).length ? ' ' + s.replies.length : '') + '</button>');
+    }
+    const resolvedNote = s.status === 'open' ? ''
+      : '<p class="mt-1.5 font-mono text-[9px] text-slate-500">' +
+        (s.status === 'superseded'
+          ? '対案が採用されました'
+          : esc(memberName(p, s.resolvedBy)) + ' が' + (s.status === 'accepted' ? '採用' : '却下')) + '</p>';
+
+    return '<div class="card' + (depth ? ' is-counter' : '') + '">' +
+      '<div class="card-head">' + avatarHTML(p, s.authorId) + counterTag + badge +
+      '<span class="card-time">' + fmtTime(s.createdAt) + '</span></div>' +
+      (depth ? '' : '<p class="mb-1 font-mono text-[9px] text-slate-500">' + esc(sectionNameOf(p, s.sectionId)) + '</p>') +
+      body + resolvedNote + notes + noteBox + counterBox +
+      (actionBtns.length ? '<div class="composer-actions">' + actionBtns.join('') + '</div>' : '') +
+    '</div>';
   }
 
   function renderComments(p) {
@@ -1170,6 +1327,40 @@
     renderProject();
   }
 
+  /** 既存の提案に案を重ねる。下敷きは親の提案文。 */
+  function createCounter(parentId, text) {
+    const p = project();
+    const parent = p.suggestions.find((x) => x.id === parentId);
+    if (!parent || parent.status !== 'open') return;
+    const base = counterBase(parent);
+    if (!text) { toast('対案が空です'); return; }
+    if (text === base) { toast('元の案と同じ内容です'); return; }
+    const a = actor();
+    p.suggestions.push({
+      id: uid('sug'),
+      sectionId: parent.sectionId,
+      lineId: parent.lineId,
+      // 行の追加提案への対案は、やはり行の追加。それ以外は書き換えになる。
+      kind: parent.kind === 'insert' ? 'insert' : 'edit',
+      text: text,
+      baseText: base,
+      authorId: a.id,
+      createdAt: nowISO(),
+      status: 'open',
+      resolvedBy: null,
+      resolvedAt: null,
+      replies: [],
+      parentId: parent.id
+    });
+    log(p, 'suggest.counter', {
+      sectionId: parent.sectionId, lineId: parent.lineId,
+      before: base, after: text, note: memberName(p, parent.authorId) + ' の案へ'
+    });
+    ui.sugCounterTo = null;
+    save();
+    renderProject();
+  }
+
   function suggestDelete() {
     const p = project();
     const c = ui.composer;
@@ -1230,6 +1421,24 @@
     sug.status = accept ? 'accepted' : 'rejected';
     sug.resolvedBy = a.id;
     sug.resolvedAt = nowISO();
+
+    // 採用したら、同じチェーンに残っている未処理の案は行き場が無くなる。
+    //  ・祖先 … この案に置き換わったので「対案で解決」
+    //  ・子孫 … 前提が変わるので同じく閉じる
+    // 却下のときは、その案を土台にした子孫だけを畳む。
+    const closeOthers = (list, status) => list.forEach((x) => {
+      if (x.status !== 'open') return;
+      x.status = status;
+      x.resolvedBy = a.id;
+      x.resolvedAt = nowISO();
+    });
+    if (accept) {
+      closeOthers(suggestionChain(p, sug).filter((x) => x.id !== sug.id), 'superseded');
+      closeOthers(suggestionDescendants(p, sug.id), 'superseded');
+    } else {
+      closeOthers(suggestionDescendants(p, sug.id), 'rejected');
+    }
+
     log(p, accept ? 'suggest.accept' : 'suggest.reject', {
       sectionId: sug.sectionId, lineId: sug.lineId,
       before: sug.baseText, after: accept ? sug.text : '', note: memberName(p, sug.authorId) + ' の提案'
@@ -2114,6 +2323,23 @@
         return;
       }
       if (e.target.closest('[data-sug-comment-cancel]')) { ui.sugReplyTo = null; renderProject(); return; }
+
+      const co = e.target.closest('[data-sug-counter-open]');
+      if (co) {
+        ui.sugCounterTo = co.dataset.sugCounterOpen;
+        renderProject();
+        const t = $('sug-counter-input');
+        if (t) { t.focus(); t.setSelectionRange(t.value.length, t.value.length); }
+        return;
+      }
+      if (e.target.closest('[data-sug-counter-cancel]')) { ui.sugCounterTo = null; renderProject(); return; }
+      const cs = e.target.closest('[data-sug-counter-send]');
+      if (cs) {
+        const t = $('sug-counter-input');
+        createCounter(cs.dataset.sugCounterSend, t ? t.value.trim() : '');
+        return;
+      }
+
       const send = e.target.closest('[data-sug-comment-send]');
       if (send) {
         const sug = p.suggestions.find((x) => x.id === send.dataset.sugCommentSend);
@@ -2131,13 +2357,19 @@
 
     // Ctrl+Enter で送信、Escape で閉じる（行内コンポーザーと同じ操作感）。
     $('panel-suggestions').addEventListener('keydown', (e) => {
-      if (e.target.id !== 'sug-comment-input') return;
+      const isComment = e.target.id === 'sug-comment-input';
+      const isCounter = e.target.id === 'sug-counter-input';
+      if (!isComment && !isCounter) return;
       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
-        const btn = $('panel-suggestions').querySelector('[data-sug-comment-send]');
+        const sel = isComment ? '[data-sug-comment-send]' : '[data-sug-counter-send]';
+        const btn = $('panel-suggestions').querySelector(sel);
         if (btn) btn.click();
       }
-      if (e.key === 'Escape') { ui.sugReplyTo = null; renderProject(); }
+      if (e.key === 'Escape') {
+        if (isComment) ui.sugReplyTo = null; else ui.sugCounterTo = null;
+        renderProject();
+      }
     });
 
     $('panel-comments').addEventListener('click', (e) => {
@@ -2273,6 +2505,7 @@
     });
 
     $('help-btn').addEventListener('click', () => openModal('help-modal'));
+    $('patch-btn').addEventListener('click', openPatchNotes);
 
     $('open-members-btn').addEventListener('click', () => { renderMembers(); openModal('members-modal'); });
 
@@ -2398,4 +2631,5 @@
   bind();
   renderAll();
   renderSyncPill();
+  renderPatchDot();
 })();

@@ -131,6 +131,30 @@ SPLITAPP と同じく、**まず接続してから使う**。未接続の状態�
 
 > 現状は**手動同期のみ**。自動同期・削除の伝播・複数人同時編集の競合解決（今は updatedAt の新しい方を丸ごと採用）は未実装。
 
+## Googleログイン（Firebase Authentication）
+
+作詞・作曲・WorksDB で共通のGoogleアカウント認証を使うための試験導入。**今回は認証だけ**で、Firestore・Hosting・Cloud Functions は使わない。取得した `uid` は既存の作業者IDや共同編集データにはまだ紐付けていない。
+
+- 認証の層は `auth.js`（ESモジュール）に閉じてあり、`app.js` には一切手を入れていない
+- 表示の出し分けは `<html data-auth>` の3状態（`checking` / `out` / `in`）だけを見る。`checking` の間は本体もログイン画面も描かないので、認証確認前に中身が一瞬見えることはない
+- Firebase公式のブラウザ向けESモジュールをCDNから読む。npm や Vite などのビルド環境は導入していない
+- ログイン状態は `browserLocalPersistence`。リロードしても維持される
+
+### 設定
+
+`firebase-config.js` に Firebase Console の `firebaseConfig` を貼る。**空のままなら認証は無効**で、これまで通りログインなしで動く（値を入れてデプロイした時点でログインが必要になる）。
+
+Firebase Console 側では2つ。
+
+1. Authentication > Sign-in method で **Google** を有効にする
+2. Authentication > Settings > **承認済みドメイン**に `momijimugi.github.io` を追加する
+
+どちらも漏れると `auth/operation-not-allowed` / `auth/unauthorized-domain` になるが、その場合は画面に日本語で理由が出る。
+
+### 落ちないようにしてあるところ
+
+設定が空のとき、SDKが読めないとき、初期化に失敗したときは、**認証を挟まずそのままアプリを開く**。認証まわりの不調で既存機能が使えなくなることを避けるため。
+
 ## 作業者の自動判別（端末ひも付け）
 
 ログインもパスワードも持たない。**「この端末は誰のものか」を一度だけ決めて覚える**方式。

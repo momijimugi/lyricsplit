@@ -140,6 +140,35 @@ SPLITAPP と同じく、**まず接続してから使う**。未接続の状態�
 - Firebase公式のブラウザ向けESモジュールをCDNから読む。npm や Vite などのビルド環境は導入していない
 - ログイン状態は `browserLocalPersistence`。リロードしても維持される
 
+### 接続先（ワークスペース）
+
+1人のユーザーが、共作相手やチームごとに別々のApps Script接続先を持てる。接続情報は uid ごとに Firestore の1件のドキュメントへ置く。
+
+```
+users/{uid}/appSettings/lyricsplit
+{
+  activeWorkspaceId: "ws_xxxxx",
+  workspaces: {
+    "ws_xxxxx": { label, gasUrl, gasKey, model, updatedAt },
+    "ws_yyyyy": { label, gasUrl, gasKey, model, updatedAt }
+  },
+  updatedAt
+}
+```
+
+- ワークスペースIDは `ws_` + 乱数 + 時刻の内部ID。表示名（label）を変えてもIDは変わらない
+- **Gemini APIキーは保存しない**（Apps Script の Script Properties 側で持つ）
+- 接続情報をユーザー直下にベタ書きせず「ワークスペース」を挟んでいるのは、将来ここを共有ワークスペース（1つの接続先に複数ユーザーが参加）へ移すときに、`workspaces` を別コレクションへ引き上げるだけで済むようにするため
+- URL・接続キーは、**Apps Scriptへ pull が通ってからでないと保存しない**。打ち間違いをFirestoreに残さないため
+- ログイン後は `activeWorkspaceId` の接続先で自動接続する。通らなければ接続画面へ戻り、保存済みの接続先の一覧から選び直せる
+- 削除するのはFirestoreの接続設定だけ。端末の案件データは消さない
+
+### 案件は接続先ごとに分ける
+
+案件に `workspaceId` を持たせ、**同期はいまの接続先の案件だけを送受する**。これが無いと、接続先を切り替えて同期したときに別チームの案件を相手のシートへ送ってしまう。ダッシュボードの一覧も現在の接続先のぶんだけを出す。
+
+認証を入れる前からある案件や、未接続で作った案件は `workspaceId` が無い。これらは最初に接続したときに、その接続先のものとして引き取る。
+
 ### 設定
 
 `firebase-config.js` に Firebase Console の `firebaseConfig` を貼る。**空のままなら認証は無効**で、これまで通りログインなしで動く（値を入れてデプロイした時点でログインが必要になる）。
@@ -148,6 +177,7 @@ Firebase Console 側では2つ。
 
 1. Authentication > Sign-in method で **Google** を有効にする
 2. Authentication > Settings > **承認済みドメイン**に `momijimugi.github.io` を追加する
+3. Firestore Database を作成し、`firestore.rules` の内容をルールとして公開する（自分の uid の下だけを読み書きできる）
 
 どちらも漏れると `auth/operation-not-allowed` / `auth/unauthorized-domain` になるが、その場合は画面に日本語で理由が出る。
 

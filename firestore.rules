@@ -1,0 +1,21 @@
+rules_version = '2';
+
+// LYRICLAB — Firestore セキュリティルール
+//
+// Firebase Console > Firestore Database > ルール に貼って公開する。
+// このリポジトリのファイルは控えで、置いただけでは反映されない。
+//
+// 方針：ユーザーは自分の uid の下だけを読み書きできる。
+// 他ユーザーの領域には一切触れられない。
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // users/{uid}/... 配下すべて。今使っているのは
+    // users/{uid}/appSettings/lyricsplit（Apps Scriptの接続設定）だけ。
+    match /users/{uid}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // 上記以外は既定で拒否。
+  }
+}

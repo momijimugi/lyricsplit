@@ -13,8 +13,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Noto+Sans+JP:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=1.4.0">
-  <link rel="stylesheet" href="lyrics.css?v=1.4.0">
+  <link rel="stylesheet" href="styles.css?v=1.6.0">
+  <link rel="stylesheet" href="lyrics.css?v=1.6.0">
 </head>
 <body class="min-h-screen text-slate-100 antialiased selection:bg-acid selection:text-ink">
 
@@ -23,6 +23,10 @@
        未ログインならここだけ、ログイン済みなら本体だけが見える。 -->
   <div id="auth-checking" class="auth-screen">
     <p class="auth-checking-note">確認中…</p>
+  </div>
+
+  <div id="auth-restoring" class="auth-screen">
+    <p class="auth-checking-note">接続設定を復元しています…</p>
   </div>
 
   <div id="auth-gate" class="auth-screen">
@@ -85,7 +89,12 @@
             接続キーはタブを閉じると消えるため、開くたびに入力が必要です。
           </p>
 
+          <p id="connect-notice" class="connect-notice hidden"></p>
+
+          <div id="connect-workspaces" class="ws-picker hidden"></div>
+
           <form id="connect-form" class="mt-6 grid gap-3">
+            <label><span class="field-label">接続先の名前</span><input id="cn-label" class="field" placeholder="メイン"></label>
             <label><span class="field-label">Apps Script Web App URL</span><input id="cn-url" type="url" class="field" placeholder="https://script.google.com/macros/s/.../exec" required></label>
             <label><span class="field-label">接続キー（API_KEY）</span><input id="cn-key" type="password" autocomplete="off" class="field" placeholder="Script PropertiesのAPI_KEY" required></label>
             <p id="connect-error" class="hidden text-xs leading-5 text-rose-400"></p>
@@ -321,6 +330,20 @@
         <button type="button" data-close class="btn btn-ghost btn-icon" aria-label="閉じる">✕</button>
       </div>
       <p class="mt-2 text-[11px] leading-5 text-slate-500">AI分析とスプレッドシート同期は、同じ Apps Script ウェブアプリを使います。接続情報はこの端末にのみ保存されます（キーはタブを閉じると消えます）。</p>
+      <div id="ws-manager" class="ws-manager hidden">
+        <p class="field-label">接続先（ワークスペース）</p>
+        <div id="ws-list" class="ws-list"></div>
+        <div class="ws-actions">
+          <input id="ws-label" class="field flex-1" placeholder="この接続先の名前">
+          <button id="ws-rename" type="button" class="btn btn-ghost btn-sm">名前を保存</button>
+        </div>
+        <div class="ws-actions">
+          <button id="ws-add" type="button" class="btn btn-secondary btn-sm">＋ 新しい接続先を追加</button>
+          <button id="ws-delete" type="button" class="btn btn-ghost btn-sm text-rose-400">この接続先を削除</button>
+        </div>
+        <p id="ws-add-note" class="ws-note hidden">下の欄に新しい接続先のURLと接続キーを入れて保存すると、接続を確かめたうえで追加します。</p>
+      </div>
+
       <div class="mode-switch mt-4" id="ai-provider-tabs">
         <button type="button" class="mode-btn is-active" data-provider="gas">Apps Script経由</button>
         <button type="button" class="mode-btn" data-provider="gemini">Gemini APIキー直接</button>
@@ -432,7 +455,7 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script src="app.js?v=1.4.0"></script>
-  <script type="module" src="auth.js?v=1.4.0"></script>
+  <script src="app.js?v=1.6.0"></script>
+  <script type="module" src="auth.js?v=1.6.0"></script>
 </body>
 </html>

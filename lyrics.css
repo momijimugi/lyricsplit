@@ -864,11 +864,13 @@ body.is-resizing { user-select: none; cursor: col-resize; }
 /* --- auth gate ------------------------------------------------------------
    認証まわりは既存のスタイルに触らず、この節だけで完結させている。
    表示の出し分けは <html data-auth> の3状態だけを見る。 */
-#auth-checking, #auth-gate { display: none; }
+#auth-checking, #auth-restoring, #auth-gate { display: none; }
 html[data-auth="checking"] #auth-checking { display: flex; }
+html[data-auth="restoring"] #auth-restoring { display: flex; }
 html[data-auth="out"] #auth-gate { display: flex; }
-/* 認証が済むまで本体を描かない（一瞬でも中身が見えないように） */
+/* 認証と接続の復元が済むまで本体を描かない（一瞬でも中身が見えないように） */
 html[data-auth="checking"] .grid-noise,
+html[data-auth="restoring"] .grid-noise,
 html[data-auth="out"] .grid-noise { display: none; }
 
 .auth-screen {
@@ -969,4 +971,79 @@ html[data-auth="out"] .grid-noise { display: none; }
 /* 狭い画面では名前を畳んで、アイコンとログアウトだけ残す */
 @media (max-width: 640px) {
   .auth-user-name { display: none; }
+}
+
+/* 接続画面に出す、自動復元の結果 */
+.connect-notice {
+  margin-top: 1rem;
+  padding: .6rem .75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--warn);
+  background: var(--surface-muted);
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+}
+/* Firestore側の不調は、Apps Scriptの接続失敗と色でも区別する。 */
+.connect-notice.is-firestore { border-color: rgba(var(--accent-b-rgb), .6); }
+.connect-notice.hidden { display: none; }
+
+/* --- workspaces (接続先) --------------------------------------------------- */
+.ws-picker { margin-top: 1rem; text-align: left; }
+.ws-picker.hidden, .ws-manager.hidden { display: none; }
+.ws-manager {
+  margin-top: 1rem;
+  padding: .8rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-soft);
+  background: var(--surface-muted);
+  text-align: left;
+}
+.ws-list { margin-top: .4rem; }
+.ws-row {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  width: 100%;
+  margin-top: .35rem;
+  padding: .5rem .65rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  text-align: left;
+  transition: border-color .15s ease;
+}
+.ws-row:hover { border-color: var(--hover-border); }
+.ws-row.is-active { border-color: rgba(var(--accent-text-rgb), .6); }
+.ws-row-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ws-row-go {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: .1em;
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+.ws-row.is-active .ws-row-go { color: var(--accent-text); }
+.ws-actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .5rem; align-items: center; }
+.ws-actions .field { min-width: 8rem; }
+.ws-note { margin-top: .5rem; font-size: 10px; line-height: 1.7; color: var(--text-faint); }
+.ws-note.hidden, .ws-actions .btn.hidden { display: none; }
+.ws-or {
+  margin-top: .8rem;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  text-align: center;
 }

@@ -32,7 +32,6 @@
   };
 
   const NAMING_KEY = 'lyriclab_naming';
-  const VIEW_KEY = 'lyriclab_view';
 
   // 取り込み時にセクション名から種別を推定するための表記ゆれ辞書。
   const KIND_ALIASES = [
@@ -61,6 +60,7 @@
     'suggest.create':  { label: '修正を提案',     points: 2 },
     'suggest.accept':  { label: '提案を採用',     points: 1 },
     'suggest.reject':  { label: '提案を却下',     points: 0.5 },
+    'suggest.comment': { label: '提案へコメント', points: 1 },
     'comment.create':  { label: 'コメント',       points: 1.5 },
     'comment.reply':   { label: '返信',           points: 1 },
     'comment.resolve': { label: 'コメント解決',   points: 0.5 },
@@ -70,12 +70,6 @@
 
   // 最終比率の配合。データが無い軸は自動的に他の軸へ按分される。
   const AXIS_WEIGHTS = { text: 0.55, adopted: 0.20, involvement: 0.25 };
-
-  const MODE_HINTS = {
-    edit: '編集モード：行をクリックすると直接書き換えられます。書いた文字数はそのままあなたの貢献として記録されます。',
-    suggest: '提案モード：行をクリックして書き換え案を出します。相手が採用したときだけ歌詞に反映され、提案者の貢献になります。',
-    comment: 'コメントモード：行をクリックして指摘や質問を残します。歌詞は変わりませんが、推敲への関与としてログに残ります。'
-  };
 
   /* ---------------------------------------------------------------- 状態 */
 
@@ -89,11 +83,10 @@
     naming: 'jp',     // 'jp' = Aメロ/サビ方式、'en' = Verse/Chorus方式
     preview: 'clean', // 'clean' | 'authors' | 'suggested'
     previewOn: true,
-    viewClean: true,  // 行番号・セクション設定をホバー時だけ出して読みやすくする
-    viewColors: true, // 行の左罫を主著者の色にする
     logsAll: false,   // 作業ログを全件表示するか
     composer: null,   // { sectionId, lineId|null, mode, kind }
     replyTo: null,    // comment id
+    sugReplyTo: null, // suggestion id（提案へのコメント入力を開いている対象）
     exportTab: 'lyrics'
   };
 
@@ -116,10 +109,6 @@
     try {
       const n = localStorage.getItem(NAMING_KEY);
       if (n === 'jp' || n === 'en') ui.naming = n;
-    } catch (e) {}
-    try {
-      const v = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null');
-      if (v) { ui.viewClean = v.clean !== false; ui.viewColors = v.colors !== false; }
     } catch (e) {}
   }
 
@@ -148,7 +137,10 @@
       ids.push(s && s.id);
       (s && s.lines || []).forEach((l) => ids.push(l && l.id));
     });
-    (p.suggestions || []).forEach((s) => ids.push(s && s.id));
+    (p.suggestions || []).forEach((s) => {
+      ids.push(s && s.id);
+      (s && s.replies || []).forEach((r) => ids.push(r && r.id));
+    });
     (p.comments || []).forEach((c) => {
       ids.push(c && c.id);
       (c && c.replies || []).forEach((r) => ids.push(r && r.id));
@@ -165,6 +157,7 @@
     });
     p.sections = Array.isArray(p.sections) ? p.sections : [];
     p.suggestions = Array.isArray(p.suggestions) ? p.suggestions : [];
+    p.suggestions.forEach((s) => { s.replies = Array.isArray(s.replies) ? s.replies : []; });
     p.comments = Array.isArray(p.comments) ? p.comments : [];
     p.logs = Array.isArray(p.logs) ? p.logs : [];
     p.agreement = p.agreement || null;
@@ -433,14 +426,69 @@
   /* ------------------------------------------------------------ 表示 */
 
   function renderAll() {
+    // 未接続のまま編集するとシートと食い違うので、入口で接続画面へ戻す。
+    if (needsConnect()) ui.view = 'connect';
+    else if (ui.view === 'connect') ui.view = 'dashboard';
     document.body.dataset.appView = ui.view;
+    $('connect-view').classList.toggle('hidden', ui.view !== 'connect');
     $('dashboard-view').classList.toggle('hidden', ui.view !== 'dashboard');
     $('project-view').classList.toggle('hidden', ui.view !== 'project');
     $('actor-wrap').classList.toggle('hidden', ui.view !== 'project');
     if (ui.view === 'project') $('actor-wrap').classList.add('sm:flex');
     $('identity-btn').classList.toggle('hidden', ui.view !== 'project');
-    if (ui.view === 'dashboard') renderDashboard();
+    // 入口の接続画面では、まだ使えない操作を並べない。
+    ['sync-pill', 'sync-btn', 'nav-dashboard'].forEach((id) =>
+      $(id).classList.toggle('hidden', ui.view === 'connect'));
+    if (ui.view === 'connect') renderConnect();
+    else if (ui.view === 'dashboard') renderDashboard();
     else { renderProject(); updateJumpCurrent(); }
+  }
+
+  /** 接続画面。前回のURLは端末に残っているので、鍵だけ入れれば戻れる状態にする。 */
+  function renderConnect() {
+    const cfg = aiConfig();
+    if (!$('cn-url').value) $('cn-url').value = cfg.url || '';
+    $('connect-error').classList.add('hidden');
+    const submit = $('connect-submit');
+    submit.disabled = false;
+    submit.textContent = '接続して開く';
+    ($('cn-url').value ? $('cn-key') : $('cn-url')).focus();
+  }
+
+  async function submitConnect() {
+    const url = $('cn-url').value.trim();
+    const key = $('cn-key').value;
+    const err = $('connect-error');
+    const submit = $('connect-submit');
+    if (!url || !key) {
+      err.textContent = 'URLと接続キーの両方を入力してください。';
+      err.classList.remove('hidden');
+      return;
+    }
+    const cfg = aiConfig();
+    err.classList.add('hidden');
+    submit.disabled = true;
+    submit.textContent = '接続を確認中…';
+    // 打ち間違いに気づかないまま編集を始めないよう、実際に通信して確かめる。
+    saveAiConfig({ provider: 'gas', url: url, model: cfg.model || AI_DEFAULT_MODEL, gasKey: key, geminiKey: cfg.geminiKey || '' });
+    try {
+      await gasPost('pull', null, 20000);
+    } catch (e) {
+      try { sessionStorage.removeItem(AI_SECRET_KEY); } catch (e2) {}
+      err.textContent = (e && e.message) || String(e);
+      err.classList.remove('hidden');
+      submit.disabled = false;
+      submit.textContent = '接続して開く';
+      renderSyncPill();
+      return;
+    }
+    setLocalOnly(false);
+    $('cn-key').value = '';
+    ui.view = 'dashboard';
+    renderSyncPill();
+    renderAll();
+    toast('接続しました。同期して最新を取り込みます');
+    syncNow();
   }
 
   function renderDashboard() {
@@ -504,22 +552,19 @@
     renderSections(p);
     renderPreview(p);
     renderPanels(p);
-    $('mode-hint').textContent = MODE_HINTS[ui.mode];
     Array.from($('mode-switch').children).forEach((b) => b.classList.toggle('is-active', b.dataset.mode === ui.mode));
-    Array.from($('naming-switch').children).forEach((b) => b.classList.toggle('is-active', b.dataset.naming === ui.naming));
-    Array.from($('view-switch').children).forEach((b) =>
-      b.classList.toggle('is-active', b.dataset.view === 'clean' ? ui.viewClean : ui.viewColors));
     Array.from($('panel-tabs').children).forEach((b) => b.classList.toggle('is-active', b.dataset.tab === ui.tab));
   }
 
   function renderSplitStrip(p) {
     const res = analyze(p);
     const shares = p.agreement || res.percent;
-    $('split-headline').textContent = p.members.map((m) => memberName(p, m.id) + ' ' + (shares[m.id] || 0).toFixed(1) + '%').join(' / ') || '—';
     $('split-bar').innerHTML = p.members.map((m) =>
       '<div style="width:' + (shares[m.id] || 0) + '%;background:' + m.color + '" title="' + esc(m.name) + '"></div>'
     ).join('');
-    $('split-legend').innerHTML = p.members.map((m) =>
+    $('split-legend').innerHTML =
+      '<span class="split-caption">Split</span>' +
+      p.members.map((m) =>
       '<span class="flex items-center gap-1.5"><span class="avatar" style="background:' + m.color + '">' + esc(m.name.slice(0, 1)) + '</span>' +
       esc(m.name) + ' <b>' + (shares[m.id] || 0).toFixed(1) + '%</b></span>'
     ).join('') + (p.agreement
@@ -665,8 +710,6 @@
 
   function renderSections(p) {
     const host = $('section-list');
-    host.classList.toggle('is-clean', ui.viewClean);
-    host.classList.toggle('no-colors', !ui.viewColors);
     if (!p.sections.length) {
       host.innerHTML = '<div class="empty-note">セクションがありません。「＋ セクション追加」か「歌詞を一括入力」から始めてください。</div>';
       return;
@@ -689,7 +732,7 @@
         composerAtEnd +
         '<div class="border-t border-line/70 px-3 py-2">' +
           '<button type="button" class="btn btn-ghost btn-sm" data-addline="' + s.id + '">' +
-            (ui.mode === 'suggest' ? '＋ 行の追加を提案' : ui.mode === 'comment' ? '💬 このセクションにコメント' : '＋ 行を追加') +
+            (ui.mode === 'suggest' ? '＋ 行の追加を提案' : ui.mode === 'comment' ? '＋ このセクションにコメント' : '＋ 行を追加') +
           '</button>' +
         '</div>' +
       '</div>';
@@ -704,7 +747,7 @@
     const isOpen = ui.composer && ui.composer.lineId === l.id;
     const marks =
       (openSug ? '<span class="line-badge is-suggest">提案' + openSug + '</span>' : '') +
-      (openCom ? '<span class="line-badge is-comment">💬' + openCom + '</span>' : '') +
+      (openCom ? '<span class="line-badge is-comment">コメント' + openCom + '</span>' : '') +
       (owners.length > 1 ? '<span class="line-badge is-co">共作</span>' : '');
     return '<div class="lyric-line' + (isOpen ? ' is-open' : '') + '" data-line="' + l.id + '" data-section="' + s.id + '"' +
         (top ? ' data-owner="1" style="--owner-color:' + memberColor(p, top) + '"' : '') + '>' +
@@ -749,6 +792,16 @@
    */
   function buildPreview(p, mode) {
     const openSug = p.suggestions.filter((s) => s.status === 'open');
+    const openCom = p.comments.filter((c) => !c.resolved);
+    // 未解決コメントを行／セクションへぶら下げる形に整える。
+    const notesFor = (lineId, sectionId) => openCom
+      .filter((c) => (lineId ? c.lineId === lineId : !c.lineId && c.sectionId === sectionId))
+      .map((c) => ({
+        author: memberName(p, c.authorId),
+        color: memberColor(p, c.authorId),
+        text: c.text,
+        replies: (c.replies || []).length
+      }));
     return p.sections.map((s) => {
       const rows = [];
       s.lines.forEach((l) => {
@@ -759,7 +812,8 @@
           color: owners[0] ? memberColor(p, owners[0]) : null,
           mark: mode === 'authors' && owners.length
             ? owners.map((id) => memberName(p, id)).join('+')
-            : ''
+            : '',
+          notes: notesFor(l.id, s.id)
         };
         if (mode !== 'suggested') { rows.push(base); return; }
 
@@ -767,6 +821,7 @@
         const dels = openSug.filter((x) => x.lineId === l.id && x.kind === 'delete');
         if (!edits.length && !dels.length) { rows.push(base); return; }
         rows.push(Object.assign({}, base, {
+          notes: [],
           state: 'removed',
           mark: dels.length ? '削除案 ' + memberName(p, dels[0].authorId) : '元の行'
         }));
@@ -781,7 +836,8 @@
           mark: '追加案 ' + memberName(p, x.authorId)
         }));
       }
-      return { name: sectionName(p, s), rows: rows };
+      // 行に紐づかないセクション宛てのコメントはセクション末尾へ。
+      return { name: sectionName(p, s), rows: rows, notes: notesFor(null, s.id) };
     });
   }
 
@@ -792,7 +848,12 @@
     Array.from($('preview-modes').children).forEach((b) => b.classList.toggle('is-active', b.dataset.preview === ui.preview));
 
     const doc = buildPreview(p, ui.preview);
-    const body = doc.filter((s) => s.rows.length).map((s) =>
+    const noteHTML = (notes) => (notes || []).map((n) =>
+      '<p class="preview-note" style="--owner-color:' + n.color + '">' +
+        '<span class="preview-note-who">' + esc(n.author) + '</span>' + esc(n.text) +
+        (n.replies ? '<span class="pv-mark">返信' + n.replies + '</span>' : '') +
+      '</p>').join('');
+    const body = doc.filter((s) => s.rows.length || (s.notes || []).length).map((s) =>
       '<div class="preview-section"><p class="preview-section-name">' + esc(s.name) + '</p>' +
       s.rows.map((r) => {
         const cls = 'preview-line' +
@@ -800,17 +861,20 @@
           (ui.preview === 'authors' && r.color ? ' is-authored' : '');
         const style = ui.preview === 'authors' && r.color ? ' style="--owner-color:' + r.color + '"' : '';
         return '<p class="' + cls + '"' + style + '>' + (esc(r.text) || '&nbsp;') +
-          (r.mark ? '<span class="pv-mark">' + esc(r.mark) + '</span>' : '') + '</p>';
-      }).join('') + '</div>').join('');
+          (r.mark ? '<span class="pv-mark">' + esc(r.mark) + '</span>' : '') + '</p>' +
+          noteHTML(r.notes);
+      }).join('') + noteHTML(s.notes) + '</div>').join('');
 
     $('preview-doc').innerHTML = body || '<div class="empty-note">まだ歌詞がありません。</div>';
 
     const lineCount = p.sections.reduce((a, s) => a + s.lines.length, 0);
     const charCount = p.sections.reduce((a, s) => a + s.lines.reduce((b, l) => b + l.text.length, 0), 0);
     const open = p.suggestions.filter((s) => s.status === 'open').length;
+    const openCom = p.comments.filter((c) => !c.resolved).length;
     $('preview-stats').innerHTML = [
       p.sections.length + ' sections', lineCount + ' lines', charCount + ' chars',
-      open ? '<span style="color:var(--warn)">未処理の提案 ' + open + '</span>' : '提案なし'
+      open ? '<span style="color:var(--warn)">未処理の提案 ' + open + '</span>' : '提案なし',
+      openCom ? '<span style="color:var(--accent-b-text)">未解決コメント ' + openCom + '</span>' : 'コメントなし'
     ].map((t) => '<span>' + t + '</span>').join('');
   }
 
@@ -872,15 +936,33 @@
         : s.kind === 'insert'
           ? '<p class="text-xs"><span class="diff-new">＋ ' + esc(s.text) + '</span></p>'
           : '<p class="text-xs leading-6"><span class="diff-old">' + esc(s.baseText) + '</span><br><span class="diff-new">' + esc(s.text) + '</span></p>';
-      const actions = s.status === 'open'
-        ? '<div class="composer-actions"><button type="button" class="btn btn-primary btn-sm" data-sug-accept="' + s.id + '">採用</button>' +
-          '<button type="button" class="btn btn-ghost btn-sm" data-sug-reject="' + s.id + '">却下</button></div>'
+      // 提案そのものへのやりとり（採用前の質問・意見）。
+      const notes = (s.replies || []).map((r) =>
+        '<div class="thread-item"><div class="card-head">' + avatarHTML(p, r.authorId) +
+        '<span class="card-time">' + fmtTime(r.createdAt) + '</span></div>' +
+        '<p class="text-xs leading-5">' + esc(r.text) + '</p></div>').join('');
+      const noteBox = ui.sugReplyTo === s.id
+        ? '<div class="composer"><textarea id="sug-comment-input" rows="2" placeholder="この提案へのコメント"></textarea>' +
+          '<div class="composer-actions"><button type="button" class="btn btn-primary btn-sm" data-sug-comment-send="' + s.id + '">コメントする</button>' +
+          '<button type="button" class="btn btn-ghost btn-sm" data-sug-comment-cancel="1">キャンセル</button></div></div>'
+        : '';
+      const actionBtns = [];
+      if (s.status === 'open') {
+        actionBtns.push('<button type="button" class="btn btn-primary btn-sm" data-sug-accept="' + s.id + '">採用</button>');
+        actionBtns.push('<button type="button" class="btn btn-ghost btn-sm" data-sug-reject="' + s.id + '">却下</button>');
+      }
+      if (ui.sugReplyTo !== s.id) {
+        actionBtns.push('<button type="button" class="btn btn-ghost btn-sm" data-sug-comment-open="' + s.id + '">コメント' +
+          ((s.replies || []).length ? ' ' + s.replies.length : '') + '</button>');
+      }
+      const resolvedNote = s.status === 'open' ? ''
         : '<p class="mt-1.5 font-mono text-[9px] text-slate-500">' + esc(memberName(p, s.resolvedBy)) + ' が' + (s.status === 'accepted' ? '採用' : '却下') + '</p>';
       return '<div class="card">' +
         '<div class="card-head">' + avatarHTML(p, s.authorId) + badge +
         '<span class="card-time">' + fmtTime(s.createdAt) + '</span></div>' +
         '<p class="mb-1 font-mono text-[9px] text-slate-500">' + esc(sectionNameOf(p, s.sectionId)) + '</p>' +
-        body + actions +
+        body + resolvedNote + notes + noteBox +
+        '<div class="composer-actions">' + actionBtns.join('') + '</div>' +
       '</div>';
     }).join('');
   }
@@ -1068,7 +1150,8 @@
       const sug = {
         id: uid('sug'), sectionId: s.id, lineId: line ? line.id : null,
         kind: line ? 'edit' : 'insert', text: text, baseText: line ? line.text : '',
-        authorId: a.id, createdAt: nowISO(), status: 'open', resolvedBy: null, resolvedAt: null
+        authorId: a.id, createdAt: nowISO(), status: 'open', resolvedBy: null, resolvedAt: null,
+        replies: []
       };
       p.suggestions.push(sug);
       log(p, 'suggest.create', { sectionId: s.id, lineId: sug.lineId, before: sug.baseText, after: text });
@@ -1097,7 +1180,8 @@
     p.suggestions.push({
       id: uid('sug'), sectionId: s.id, lineId: line.id, kind: 'delete',
       text: '', baseText: line.text, authorId: a.id,
-      createdAt: nowISO(), status: 'open', resolvedBy: null, resolvedAt: null
+      createdAt: nowISO(), status: 'open', resolvedBy: null, resolvedAt: null,
+      replies: []
     });
     log(p, 'suggest.create', { sectionId: s.id, lineId: line.id, before: line.text, note: '削除の提案' });
     ui.composer = null;
@@ -1168,6 +1252,7 @@
     $('pf-status').value = p.status || '作詞中';
     $('pf-note').value = p.note || '';
     $('pf-deadline').value = p.deadline || '';
+    $('pf-naming').value = ui.naming;
     $('pf-delete').classList.toggle('hidden', !!isNew);
     openModal('project-modal');
   }
@@ -1640,6 +1725,23 @@
      ==================================================================== */
 
   const LAST_SYNC_KEY = 'lyriclab_last_sync';
+  // 「接続せずにこの端末だけで使う」を選んだかどうか。接続キーと同じくタブ単位で持つ。
+  const LOCAL_ONLY_KEY = 'lyriclab_local_only';
+
+  function localOnly() {
+    try { return sessionStorage.getItem(LOCAL_ONLY_KEY) === '1'; } catch (e) { return false; }
+  }
+  function setLocalOnly(on) {
+    try {
+      if (on) sessionStorage.setItem(LOCAL_ONLY_KEY, '1');
+      else sessionStorage.removeItem(LOCAL_ONLY_KEY);
+    } catch (e) {}
+  }
+
+  /** 接続をまだ通っていない＝入口の接続画面を出すべき状態か。 */
+  function needsConnect() {
+    return !syncReady() && !localOnly();
+  }
   const syncState = { busy: false, error: null, at: null };
 
   /** Apps Script へのPOST。プリフライトを避けるためform-encodedで送る。 */
@@ -1745,6 +1847,14 @@
   /* ------------------------------------------------------------ toast */
 
   let toastTimer = null;
+  /** テーマ切り替えボタンは「切り替え先」を文字で示す（絵文字は使わない）。 */
+  function renderThemeToggle() {
+    const dark = document.documentElement.dataset.theme === 'dark';
+    const btn = $('theme-toggle');
+    btn.textContent = dark ? 'ライト' : 'ダーク';
+    btn.title = dark ? 'ライトモードに切り替え' : 'ダークモードに切り替え';
+  }
+
   function toast(msg) {
     const el = $('toast');
     el.textContent = msg;
@@ -1760,10 +1870,20 @@
       const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
       document.documentElement.dataset.theme = next;
       try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+      renderThemeToggle();
     });
+    renderThemeToggle();
 
     $('sync-btn').addEventListener('click', syncNow);
     $('sync-pill').addEventListener('click', openAiModal);
+
+    $('connect-form').addEventListener('submit', (e) => { e.preventDefault(); submitConnect(); });
+    $('connect-skip').addEventListener('click', () => {
+      setLocalOnly(true);
+      ui.view = 'dashboard';
+      renderAll();
+      toast('この端末だけで使います。共作者とは共有されません');
+    });
 
     $('nav-dashboard').addEventListener('click', () => { ui.view = 'dashboard'; ui.composer = null; renderAll(); });
     $('logo-home').addEventListener('click', (e) => { e.preventDefault(); ui.view = 'dashboard'; ui.composer = null; renderAll(); });
@@ -1866,24 +1986,6 @@
       if (!e.target.closest('[data-logs-toggle]')) return;
       ui.logsAll = !ui.logsAll;
       renderPanels(project());
-    });
-
-    // 表示トグル（すっきり表示・作者色分け）。排他ではなく個別のオン／オフ。
-    $('view-switch').addEventListener('click', (e) => {
-      const b = e.target.closest('[data-view]');
-      if (!b) return;
-      if (b.dataset.view === 'clean') ui.viewClean = !ui.viewClean;
-      else ui.viewColors = !ui.viewColors;
-      try { localStorage.setItem(VIEW_KEY, JSON.stringify({ clean: ui.viewClean, colors: ui.viewColors })); } catch (err) {}
-      renderProject();
-    });
-
-    $('naming-switch').addEventListener('click', (e) => {
-      const b = e.target.closest('[data-naming]');
-      if (!b || b.dataset.naming === ui.naming) return;
-      ui.naming = b.dataset.naming;
-      try { localStorage.setItem(NAMING_KEY, ui.naming); } catch (err) {}
-      renderProject();
     });
 
     $('panel-tabs').addEventListener('click', (e) => {
@@ -1990,10 +2092,44 @@
 
     // --- サイドパネル ---
     $('panel-suggestions').addEventListener('click', (e) => {
+      const p = project();
       const acc = e.target.closest('[data-sug-accept]');
       if (acc) return resolveSuggestion(acc.dataset.sugAccept, true);
       const rej = e.target.closest('[data-sug-reject]');
       if (rej) return resolveSuggestion(rej.dataset.sugReject, false);
+
+      const open = e.target.closest('[data-sug-comment-open]');
+      if (open) {
+        ui.sugReplyTo = open.dataset.sugCommentOpen;
+        renderProject();
+        const t = $('sug-comment-input'); if (t) t.focus();
+        return;
+      }
+      if (e.target.closest('[data-sug-comment-cancel]')) { ui.sugReplyTo = null; renderProject(); return; }
+      const send = e.target.closest('[data-sug-comment-send]');
+      if (send) {
+        const sug = p.suggestions.find((x) => x.id === send.dataset.sugCommentSend);
+        const t = $('sug-comment-input');
+        const text = t ? t.value.trim() : '';
+        if (!sug) return;
+        if (!text) { toast('コメントが空です'); return; }
+        sug.replies = sug.replies || [];
+        sug.replies.push({ id: uid('sc'), authorId: actor().id, text: text, createdAt: nowISO() });
+        log(p, 'suggest.comment', { sectionId: sug.sectionId, lineId: sug.lineId, note: text });
+        ui.sugReplyTo = null;
+        save(); renderProject();
+      }
+    });
+
+    // Ctrl+Enter で送信、Escape で閉じる（行内コンポーザーと同じ操作感）。
+    $('panel-suggestions').addEventListener('keydown', (e) => {
+      if (e.target.id !== 'sug-comment-input') return;
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        const btn = $('panel-suggestions').querySelector('[data-sug-comment-send]');
+        if (btn) btn.click();
+      }
+      if (e.key === 'Escape') { ui.sugReplyTo = null; renderProject(); }
     });
 
     $('panel-comments').addEventListener('click', (e) => {
@@ -2085,6 +2221,7 @@
     });
     $('ai-clear').addEventListener('click', () => {
       try { localStorage.removeItem(AI_CFG_KEY); sessionStorage.removeItem(AI_SECRET_KEY); } catch (err) {}
+      setLocalOnly(false);
       closeModal('ai-modal');
       renderSyncPill();
       renderAll();
@@ -2106,6 +2243,11 @@
       p.status = $('pf-status').value;
       p.note = $('pf-note').value.trim();
       p.deadline = $('pf-deadline').value;
+      const naming = $('pf-naming').value === 'en' ? 'en' : 'jp';
+      if (naming !== ui.naming) {
+        ui.naming = naming;
+        try { localStorage.setItem(NAMING_KEY, ui.naming); } catch (err) {}
+      }
       p.updatedAt = nowISO();
       save();
       closeModal('project-modal');
@@ -2121,6 +2263,8 @@
       ui.view = 'dashboard';
       renderAll();
     });
+
+    $('help-btn').addEventListener('click', () => openModal('help-modal'));
 
     $('open-members-btn').addEventListener('click', () => { renderMembers(); openModal('members-modal'); });
 

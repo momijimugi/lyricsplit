@@ -30,18 +30,48 @@
             <select id="actor-select" class="rounded-lg border border-line bg-black/20 px-3 py-1.5 text-xs font-bold"></select>
             <button id="actor-alias" type="button" class="line-badge is-suggest hidden" title="この端末の持ち主とは別の名義で作業中です。クリックで自分に戻します">別名義</button>
           </label>
-          <button id="identity-btn" type="button" class="btn btn-ghost btn-sm hidden sm:inline-flex" title="この端末の作業者を設定">👤</button>
+          <button id="identity-btn" type="button" class="btn btn-ghost btn-sm hidden sm:inline-flex" title="この端末の作業者を設定">作業者設定</button>
           <button id="sync-pill" type="button" class="sync-pill" title="クリックで接続設定を開く">
             <span id="sync-dot" class="sync-dot"></span><span id="sync-label">未接続</span>
           </button>
           <button id="sync-btn" type="button" class="btn btn-ghost btn-sm">同期</button>
-          <button id="theme-toggle" type="button" class="btn btn-ghost btn-icon" aria-label="ライト/ダーク切り替え">🌙</button>
+          <button id="theme-toggle" type="button" class="btn btn-ghost btn-sm" aria-label="ライト/ダーク切り替え">テーマ</button>
           <button id="nav-dashboard" type="button" class="btn btn-secondary btn-sm">案件一覧</button>
         </div>
       </div>
     </header>
 
     <main class="shell mx-auto max-w-6xl px-5 py-6 sm:px-8">
+
+      <!-- ============ CONNECT GATE ============ -->
+      <!-- SPLITAPPと同じく、まず接続してから使う。未接続のまま編集すると
+           シートの内容と食い違うため、入口で接続を促す。 -->
+      <section id="connect-view" class="hidden">
+        <div class="glass mx-auto max-w-xl rounded-2xl border border-line p-6 sm:p-8">
+          <p class="font-mono text-[10px] uppercase tracking-[.18em] text-acid">Connect</p>
+          <h1 class="mt-1 text-2xl font-extrabold tracking-[-.035em]">接続してはじめる</h1>
+          <p class="mt-2 text-xs leading-6 text-slate-500">
+            共作者と歌詞・提案・作業ログを共有するには、先にスプレッドシート（Apps Scriptウェブアプリ）へ接続します。
+            接続キーはタブを閉じると消えるため、開くたびに入力が必要です。
+          </p>
+
+          <form id="connect-form" class="mt-6 grid gap-3">
+            <label><span class="field-label">Apps Script Web App URL</span><input id="cn-url" type="url" class="field" placeholder="https://script.google.com/macros/s/.../exec" required></label>
+            <label><span class="field-label">接続キー（API_KEY）</span><input id="cn-key" type="password" autocomplete="off" class="field" placeholder="Script PropertiesのAPI_KEY" required></label>
+            <p id="connect-error" class="hidden text-xs leading-5 text-rose-400"></p>
+            <button id="connect-submit" type="submit" class="btn btn-primary btn-md mt-1">接続して開く</button>
+          </form>
+
+          <div class="mt-6 border-t border-line pt-5">
+            <p class="text-[11px] leading-5 text-slate-600">
+              接続先がまだ無い場合は <span class="font-mono">apps-script/Code.gs</span> をデプロイし、
+              Script Properties に <span class="font-mono">API_KEY</span> と <span class="font-mono">GEMINI_API_KEY</span> を設定してください。SPLITAPPと同じ手順です。
+            </p>
+            <button id="connect-skip" type="button" class="btn btn-ghost btn-sm mt-3">接続せずにこの端末だけで使う</button>
+            <p class="mt-1.5 text-[11px] leading-5 text-slate-600">この端末に保存された案件だけを開きます。共作者とは共有されません。</p>
+          </div>
+        </div>
+      </section>
 
       <!-- ============ DASHBOARD ============ -->
       <section id="dashboard-view">
@@ -70,31 +100,27 @@
 
       <!-- ============ PROJECT ============ -->
       <div id="project-view" class="hidden">
-        <div class="mb-4 flex items-start gap-3">
-          <button id="back-dashboard" type="button" class="btn btn-ghost btn-icon shrink-0" aria-label="案件一覧へ">←</button>
-          <div class="min-w-0 flex-1">
-            <div class="flex flex-wrap items-center gap-2">
-              <h1 id="project-header-title" class="truncate text-base font-extrabold">Untitled Lyric</h1>
-              <span id="project-header-status" class="shrink-0 rounded-full border border-line px-2 py-0.5 font-mono text-[9px] text-slate-300">作詞中</span>
+        <div class="project-top glass mb-3 rounded-2xl border border-line">
+          <div class="project-top-main">
+            <button id="back-dashboard" type="button" class="btn btn-ghost btn-icon shrink-0" aria-label="案件一覧へ">←</button>
+            <div class="project-top-id">
+              <div class="flex flex-wrap items-center gap-2">
+                <h1 id="project-header-title" class="truncate text-base font-extrabold">Untitled Lyric</h1>
+                <span id="project-header-status" class="shrink-0 rounded-full border border-line px-2 py-0.5 font-mono text-[9px] text-slate-300">作詞中</span>
+              </div>
+              <div id="project-header-meta" class="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-[10px] text-slate-500"></div>
             </div>
-            <div id="project-header-meta" class="mt-1 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] text-slate-500"></div>
-          </div>
-          <button id="edit-project-btn" type="button" class="btn btn-secondary btn-sm shrink-0">編集</button>
-        </div>
-
-        <div class="glass mb-4 rounded-2xl border border-line p-4 sm:p-5">
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p class="font-mono text-[9px] uppercase tracking-[.16em] text-slate-500">Current split（ログ算出）</p>
-              <p id="split-headline" class="mt-1 text-lg font-extrabold">—</p>
-            </div>
-            <div class="flex gap-2">
+            <div class="project-top-actions">
               <button id="open-members-btn" type="button" class="btn btn-ghost btn-sm">共作者</button>
               <button id="open-agreement-btn" type="button" class="btn btn-secondary btn-sm font-bold">スプリット合意</button>
+              <button id="edit-project-btn" type="button" class="btn btn-ghost btn-sm">編集</button>
+              <button id="help-btn" type="button" class="btn btn-ghost btn-icon" title="使い方を見る" aria-label="使い方を見る">?</button>
             </div>
           </div>
-          <div id="split-bar" class="mt-3 flex h-2.5 w-full overflow-hidden rounded-full bg-slate-700"></div>
-          <div id="split-legend" class="mt-2.5 flex flex-wrap gap-x-4 gap-y-1.5 text-[11px]"></div>
+          <div class="project-top-split">
+            <div id="split-legend" class="split-legend"></div>
+            <div id="split-bar" class="split-bar"></div>
+          </div>
         </div>
 
         <!-- ワンページを見渡すための細い追従バー -->
@@ -104,7 +130,7 @@
             <button type="button" class="jump-btn" data-jump="editor">歌詞</button>
             <button type="button" class="jump-btn" data-jump="preview">プレビュー</button>
             <button type="button" class="jump-btn" data-jump="panel">提案・分析</button>
-            <button type="button" class="jump-btn" data-jump="top">▲ 先頭</button>
+            <button type="button" class="jump-btn" data-jump="top">先頭へ</button>
           </span>
         </div>
 
@@ -117,27 +143,11 @@
                 <h2 class="mt-0.5 text-sm font-bold">歌詞エディタ</h2>
               </div>
               <div id="mode-switch" class="mode-switch" role="tablist" aria-label="編集モード">
-                <button type="button" class="mode-btn is-active" data-mode="edit">✎ 編集</button>
-                <button type="button" class="mode-btn" data-mode="suggest">✍ 提案</button>
-                <button type="button" class="mode-btn" data-mode="comment">💬 コメント</button>
+                <button type="button" class="mode-btn is-active" data-mode="edit">編集</button>
+                <button type="button" class="mode-btn" data-mode="suggest">提案</button>
+                <button type="button" class="mode-btn" data-mode="comment">コメント</button>
               </div>
             </div>
-            <p id="mode-hint" class="mb-3 rounded-lg border border-line bg-black/20 px-3 py-2 text-[11px] leading-5 text-slate-500"></p>
-
-            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <div id="view-switch" class="mode-switch" aria-label="表示">
-                <button type="button" class="mode-btn is-active" data-view="clean" title="行番号やセクション設定をホバー時だけ表示し、歌詞を読みやすくします">すっきり表示</button>
-                <button type="button" class="mode-btn is-active" data-view="colors" title="行の左罫を主著者の色にします">作者色分け</button>
-              </div>
-              <div class="flex flex-wrap items-center gap-2">
-                <span class="font-mono text-[9px] uppercase tracking-[.16em] text-slate-500">呼び名</span>
-                <div id="naming-switch" class="mode-switch" role="tablist" aria-label="セクションの呼び名">
-                  <button type="button" class="mode-btn is-active" data-naming="jp">Aメロ / サビ</button>
-                  <button type="button" class="mode-btn" data-naming="en">Verse / Chorus</button>
-                </div>
-              </div>
-            </div>
-
             <div id="section-list" class="space-y-4"></div>
 
             <div class="mt-4 flex flex-wrap gap-2">
@@ -205,7 +215,8 @@
         <label><span class="field-label">アーティスト</span><input id="pf-artist" class="field" placeholder="アーティスト名"></label>
         <label><span class="field-label">ステータス</span><select id="pf-status" class="field"><option>作詞中</option><option>推敲中</option><option>確認待ち</option><option>合意済み</option><option>完了</option></select></label>
         <label class="sm:col-span-2"><span class="field-label">テーマ・メモ</span><input id="pf-note" class="field" placeholder="例：夏の終わり／別れの手紙"></label>
-        <label class="sm:col-span-2"><span class="field-label">締切</span><input id="pf-deadline" type="date" class="field"></label>
+        <label><span class="field-label">締切</span><input id="pf-deadline" type="date" class="field"></label>
+        <label><span class="field-label">セクションの呼び名</span><select id="pf-naming" class="field"><option value="jp">Aメロ / サビ</option><option value="en">Verse / Chorus</option></select></label>
       </div>
       <div class="mt-6 flex justify-between gap-3">
         <button id="pf-delete" type="button" class="btn btn-ghost btn-sm text-rose-400">削除</button>
@@ -333,6 +344,43 @@
       <div class="mt-5 flex justify-end gap-3">
         <button id="export-copy" type="button" class="btn btn-primary btn-sm">コピー</button>
       </div>
+    </div>
+  </div>
+
+  <div id="help-modal" class="modal-backdrop hidden">
+    <div class="modal-box w-full max-w-2xl rounded-2xl border border-line bg-panel p-6 shadow-2xl">
+      <div class="flex items-start justify-between gap-3">
+        <div><p class="font-mono text-[10px] uppercase tracking-[.18em] text-acid">Help</p><h2 class="mt-1 text-lg font-bold">LYRICLABの使い方</h2></div>
+        <button type="button" data-close class="btn btn-ghost btn-icon" aria-label="閉じる">✕</button>
+      </div>
+      <div class="help-doc mt-5">
+        <h3>3つの編集モード</h3>
+        <dl>
+          <dt>編集</dt><dd>行をクリックしてそのまま書き換えます。書いた文字はあなたの貢献として記録されます。</dd>
+          <dt>提案</dt><dd>行をクリックして書き換え案を出します。相手が採用したときだけ歌詞に反映され、提案者の貢献になります。</dd>
+          <dt>コメント</dt><dd>行やセクションに指摘・質問を残します。歌詞は変わりませんが、推敲への関与としてログに残ります。</dd>
+        </dl>
+
+        <h3>貢献パーセンテージの算出</h3>
+        <p>画面上部のバーが現在の比率です。次の3軸を配合して算出しています。データのない軸は自動的に他の軸へ按分されます。</p>
+        <ul>
+          <li><b>現存する歌詞（55%）</b> — 完成歌詞に今も残っている文字数。セクション比重（サビ×1.5 など）を掛けます。</li>
+          <li><b>採用された提案（20%）</b> — 提案して相手が採用した案。</li>
+          <li><b>推敲・レビュー関与（25%）</b> — 編集・提案・コメント・レビューといった作業ログの手数。</li>
+        </ul>
+        <p>算出値はあくまで参考値です。最終比率は「スプリット合意」から話し合って決めた数字を保存してください。</p>
+
+        <h3>提案とコメント</h3>
+        <p>右のパネルで提案の採用・却下ができます。提案カードには質問や意見をコメントでき、コメントには返信できます。未解決のコメントは歌詞プレビューにも表示されます。</p>
+
+        <h3>セクションと呼び名</h3>
+        <p>セクション種別（Aメロ・サビなど）は貢献の重み付けに使われます。「Aメロ / サビ」と「Verse / Chorus」の呼び名は、案件の<b>編集</b>から切り替えられます。</p>
+
+        <h3>接続と同期</h3>
+        <p>起動時にまず接続画面が出ます。Apps ScriptウェブアプリのURLと接続キーを入れて接続すると、共作者と歌詞・提案・作業ログを共有できます。接続キーはタブを閉じると消えるため、開くたびに入力が必要です。</p>
+        <p>接続後はヘッダーの「同期」でいつでも手動同期できます。ピルに 未接続 / 接続済み / 同期中 / 同期エラー / 最終同期時刻 が出ます。接続せずに<b>この端末だけで使う</b>ことも選べますが、その場合は共作者とは共有されません。</p>
+      </div>
+      <div class="mt-6 flex justify-end"><button type="button" data-close class="btn btn-primary btn-sm">閉じる</button></div>
     </div>
   </div>
 

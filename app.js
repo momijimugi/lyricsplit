@@ -32,6 +32,7 @@
   };
 
   const NAMING_KEY = 'lyriclab_naming';
+  const PREVIEW_KEY = 'lyriclab_preview';
 
   // 取り込み時にセクション名から種別を推定するための表記ゆれ辞書。
   const KIND_ALIASES = [
@@ -79,6 +80,17 @@
   const PATCH_KEY = 'lyriclab_patch_seen';
 
   const PATCH_NOTES = [
+    {
+      version: '1.3.0',
+      date: '2026-08-31',
+      title: 'プレビューの既定変更・対案の見分け',
+      items: [
+        '歌詞プレビューの既定を「提案を反映」にし、スイッチで完成形と切り替えるようにしました',
+        '対案をプレビューで見分けられるよう、段数ぶん字下げして色と罫線を変えました',
+        '提案に書いたコメントもプレビューに表示されるようにしました',
+        'ファビコンを追加しました'
+      ]
+    },
     {
       version: '1.2.0',
       date: '2026-08-31',
@@ -153,7 +165,7 @@
     tab: 'suggestions',
     actorId: null,
     naming: 'jp',     // 'jp' = Aメロ/サビ方式、'en' = Verse/Chorus方式
-    preview: 'clean', // 'clean' | 'authors' | 'suggested'
+    preview: 'suggested', // 'suggested'（既定）| 'clean' | 'authors'
     previewOn: true,
     logsAll: false,   // 作業ログを全件表示するか
     composer: null,   // { sectionId, lineId|null, mode, kind }
@@ -182,6 +194,10 @@
     try {
       const n = localStorage.getItem(NAMING_KEY);
       if (n === 'jp' || n === 'en') ui.naming = n;
+    } catch (e) {}
+    try {
+      const v = localStorage.getItem(PREVIEW_KEY);
+      if (v === 'clean' || v === 'suggested') ui.preview = v;
     } catch (e) {}
   }
 
@@ -870,6 +886,10 @@
   function buildPreview(p, mode) {
     const openSug = p.suggestions.filter((s) => s.status === 'open');
     const openCom = p.comments.filter((c) => !c.resolved);
+
+    /** 提案が何段目の対案か。根が0。 */
+    const depthOf = (sug) => suggestionChain(p, sug).length - 1;
+
     // 未解決コメントを行／セクションへぶら下げる形に整える。
     const notesFor = (lineId, sectionId) => openCom
       .filter((c) => (lineId ? c.lineId === lineId : !c.lineId && c.sectionId === sectionId))
@@ -877,8 +897,32 @@
         author: memberName(p, c.authorId),
         color: memberColor(p, c.authorId),
         text: c.text,
-        replies: (c.replies || []).length
+        replies: (c.replies || []).length,
+        kind: 'comment'
       }));
+
+    // 提案カードに書かれたコメントも、その案の下に並べる。
+    const sugNotes = (sug) => (sug.replies || []).map((r) => ({
+      author: memberName(p, r.authorId),
+      color: memberColor(p, r.authorId),
+      text: r.text,
+      replies: 0,
+      kind: 'suggestion'
+    }));
+
+    /** 提案1件をプレビューの行に変換する。対案は段数を持たせて見分ける。 */
+    const sugRow = (x, label) => {
+      const depth = depthOf(x);
+      return {
+        text: x.text,
+        state: 'added',
+        depth: depth,
+        color: memberColor(p, x.authorId),
+        mark: (depth ? '対案' + (depth > 1 ? depth : '') : label) + ' ' + memberName(p, x.authorId),
+        notes: sugNotes(x)
+      };
+    };
+
     return p.sections.map((s) => {
       const rows = [];
       s.lines.forEach((l) => {
@@ -886,6 +930,7 @@
         const base = {
           text: l.text,
           state: 'normal',
+          depth: 0,
           color: owners[0] ? memberColor(p, owners[0]) : null,
           mark: mode === 'authors' && owners.length
             ? owners.map((id) => memberName(p, id)).join('+')
@@ -902,16 +947,23 @@
           state: 'removed',
           mark: dels.length ? '削除案 ' + memberName(p, dels[0].authorId) : '元の行'
         }));
-        edits.forEach((x) => rows.push({
-          text: x.text, state: 'added', color: memberColor(p, x.authorId),
-          mark: '提案 ' + memberName(p, x.authorId)
+        // 浅い案から並べると、上から読んで推敲の流れが追える。
+        edits.slice().sort((a, b) => depthOf(a) - depthOf(b) || String(a.createdAt).localeCompare(String(b.createdAt)))
+          .forEach((x) => rows.push(sugRow(x, '提案')));
+        dels.forEach((x) => sugNotes(x).forEach((n) => {
+          const last = rows[rows.length - 1];
+          (last.notes = last.notes || []).push(n);
         }));
+        // 行に紐づくコメントは、案を全部並べたあとにまとめて置く。
+        notesFor(l.id, s.id).forEach((n) => {
+          const last = rows[rows.length - 1];
+          (last.notes = last.notes || []).push(n);
+        });
       });
       if (mode === 'suggested') {
-        openSug.filter((x) => x.sectionId === s.id && x.kind === 'insert').forEach((x) => rows.push({
-          text: x.text, state: 'added', color: memberColor(p, x.authorId),
-          mark: '追加案 ' + memberName(p, x.authorId)
-        }));
+        openSug.filter((x) => x.sectionId === s.id && x.kind === 'insert')
+          .sort((a, b) => depthOf(a) - depthOf(b) || String(a.createdAt).localeCompare(String(b.createdAt)))
+          .forEach((x) => rows.push(sugRow(x, '追加案')));
       }
       // 行に紐づかないセクション宛てのコメントはセクション末尾へ。
       return { name: sectionName(p, s), rows: rows, notes: notesFor(null, s.id) };
@@ -922,25 +974,30 @@
     $('workspace').classList.toggle('no-preview', !ui.previewOn);
     $('preview-show').classList.toggle('hidden', ui.previewOn);
     if (!ui.previewOn) return;
-    Array.from($('preview-modes').children).forEach((b) => b.classList.toggle('is-active', b.dataset.preview === ui.preview));
+    $('preview-suggested').checked = ui.preview === 'suggested';
 
     const doc = buildPreview(p, ui.preview);
-    const noteHTML = (notes) => (notes || []).map((n) =>
-      '<p class="preview-note" style="--owner-color:' + n.color + '">' +
+    const noteHTML = (notes, depth) => (notes || []).map((n) =>
+      '<p class="preview-note' + (n.kind === 'suggestion' ? ' is-on-suggestion' : '') + '"' +
+        ' style="--owner-color:' + n.color + ';--pv-depth:' + (depth || 0) + '">' +
         '<span class="preview-note-who">' + esc(n.author) + '</span>' + esc(n.text) +
+        (n.kind === 'suggestion' ? '<span class="pv-mark">提案へ</span>' : '') +
         (n.replies ? '<span class="pv-mark">返信' + n.replies + '</span>' : '') +
       '</p>').join('');
     const body = doc.filter((s) => s.rows.length || (s.notes || []).length).map((s) =>
       '<div class="preview-section"><p class="preview-section-name">' + esc(s.name) + '</p>' +
       s.rows.map((r) => {
+        const depth = r.depth || 0;
         const cls = 'preview-line' +
-          (r.state === 'added' ? ' is-added' : r.state === 'removed' ? ' is-removed' : '') +
+          (r.state === 'added' ? (depth ? ' is-counter' : ' is-added') : r.state === 'removed' ? ' is-removed' : '') +
           (ui.preview === 'authors' && r.color ? ' is-authored' : '');
-        const style = ui.preview === 'authors' && r.color ? ' style="--owner-color:' + r.color + '"' : '';
+        // 対案は段数ぶん字下げし、書いた人の色を左罫に出す。
+        const style = ' style="--pv-depth:' + depth +
+          (r.color ? ';--owner-color:' + r.color : '') + '"';
         return '<p class="' + cls + '"' + style + '>' + (esc(r.text) || '&nbsp;') +
           (r.mark ? '<span class="pv-mark">' + esc(r.mark) + '</span>' : '') + '</p>' +
-          noteHTML(r.notes);
-      }).join('') + noteHTML(s.notes) + '</div>').join('');
+          noteHTML(r.notes, depth);
+      }).join('') + noteHTML(s.notes, 0) + '</div>').join('');
 
     $('preview-doc').innerHTML = body || '<div class="empty-note">まだ歌詞がありません。</div>';
 
@@ -2415,10 +2472,9 @@
     });
 
     // --- プレビュー列 ---
-    $('preview-modes').addEventListener('click', (e) => {
-      const b = e.target.closest('[data-preview]');
-      if (!b) return;
-      ui.preview = b.dataset.preview;
+    $('preview-suggested').addEventListener('change', (e) => {
+      ui.preview = e.target.checked ? 'suggested' : 'clean';
+      try { localStorage.setItem(PREVIEW_KEY, ui.preview); } catch (err) {}
       renderPreview(project());
     });
     $('preview-copy').addEventListener('click', () => {

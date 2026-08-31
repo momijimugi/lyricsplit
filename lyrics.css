@@ -519,6 +519,17 @@ body.is-resizing { user-select: none; cursor: col-resize; }
 .preview-line.is-authored { border-left: 2px solid var(--owner-color); padding-left: .55rem; margin-left: -.7rem; }
 .preview-line.is-added { color: var(--success); }
 .preview-line.is-removed { color: var(--danger); text-decoration: line-through; }
+/* 対案は段数ぶん字下げし、提案（実線・緑）とは別の色・破線の罫で見分ける。 */
+.preview-line.is-counter {
+  color: var(--accent-b-text);
+  margin-left: calc(var(--pv-depth, 1) * .9rem);
+  padding-left: .55rem;
+  border-left: 2px dashed var(--owner-color, var(--accent-b-text));
+}
+.preview-line.is-added {
+  padding-left: .55rem;
+  border-left: 2px solid var(--owner-color, var(--success));
+}
 .preview-line .pv-mark {
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 9px;
@@ -528,6 +539,7 @@ body.is-resizing { user-select: none; cursor: col-resize; }
 /* プレビューに寄り添う未解決コメント。歌詞本文と混ざらないよう一段下げる。 */
 .preview-note {
   margin: .1rem 0 .35rem;
+  margin-left: calc(var(--pv-depth, 0) * .9rem);
   padding: .3rem .5rem .3rem .55rem;
   border-left: 2px solid var(--owner-color, var(--line-strong));
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
@@ -543,6 +555,8 @@ body.is-resizing { user-select: none; cursor: col-resize; }
   color: var(--text-strong);
   margin-right: .4rem;
 }
+/* 提案カードに書かれたコメント。行への指摘と混ざらないよう破線にする。 */
+.preview-note.is-on-suggestion { border-left-style: dashed; background: none; }
 
 .preview-stats {
   display: flex;
@@ -773,3 +787,48 @@ body.is-resizing { user-select: none; cursor: col-resize; }
 }
 .patch-doc ul { margin-top: .5rem; padding-left: 1.1rem; list-style: disc; }
 .patch-doc li + li { margin-top: .2rem; }
+
+/* --- on/off switch -------------------------------------------------------- */
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  cursor: pointer;
+  user-select: none;
+}
+.switch-input { position: absolute; opacity: 0; width: 0; height: 0; }
+.switch-track {
+  position: relative;
+  width: 2.2rem;
+  height: 1.15rem;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-muted);
+  transition: background-color .15s ease, border-color .15s ease;
+  flex-shrink: 0;
+}
+.switch-thumb {
+  position: absolute;
+  top: 50%;
+  left: .15rem;
+  width: .8rem;
+  height: .8rem;
+  margin-top: -.4rem;
+  border-radius: 999px;
+  background: var(--text-faint);
+  transition: transform .15s ease, background-color .15s ease;
+}
+.switch-input:checked + .switch-track {
+  background: rgba(var(--accent-text-rgb), .22);
+  border-color: rgba(var(--accent-text-rgb), .55);
+}
+.switch-input:checked + .switch-track .switch-thumb {
+  transform: translateX(1.05rem);
+  background: var(--accent-text);
+}
+.switch-input:focus-visible + .switch-track { border-color: var(--accent-text); }
+.switch-label, .switch-off { font-size: 11px; font-weight: 700; }
+.switch-label { color: var(--text-faint); }
+.switch-off { color: var(--text-strong); }
+.switch-input:checked ~ .switch-label { color: var(--text-strong); }
+.switch-input:checked ~ .switch-off { color: var(--text-faint); }

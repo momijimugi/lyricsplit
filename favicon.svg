@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="LYRICLAB">
+  <rect width="64" height="64" rx="14" fill="#11141c"/>
+  <rect x="1.5" y="1.5" width="61" height="61" rx="12.5" fill="none" stroke="#8fb4d4" stroke-opacity=".35" stroke-width="3"/>
+  <g fill="#8fb4d4">
+    <path d="M16 16h7v25h7v7H16z"/>
+    <path d="M34 16h7v25h7v7H34z"/>
+  </g>
+</svg>

@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="歌詞コライトを提案モード・コメントモードで共同作詞し、その作業ログから貢献パーセンテージを算出するスプリット管理アプリ。">
+  <title>LYRICLAB — Lyric Co-write Split</title>
+  <script>(function(){try{var t=localStorage.getItem('lyriclab_theme');if(!t)t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.dataset.theme=t;}catch(e){}})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Noto+Sans+JP:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="lyrics.css">
+</head>
+<body class="min-h-screen text-slate-100 antialiased selection:bg-acid selection:text-ink">
+  <div class="grid-noise min-h-screen">
+
+    <header class="border-b border-white/5">
+      <div class="shell mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3 sm:px-8">
+        <a id="logo-home" href="#dashboard" class="flex items-center gap-3" aria-label="ダッシュボードへ戻る">
+          <span class="grid h-9 w-9 place-items-center rounded-lg border border-acid/30 bg-acid/10 font-mono text-sm font-bold text-acid">LL</span>
+          <div>
+            <p class="text-sm font-extrabold tracking-[-.035em]">LYRICLAB</p>
+            <p class="font-mono text-[9px] uppercase tracking-[.2em] text-slate-500">Lyric co-write split</p>
+          </div>
+        </a>
+        <div class="flex items-center gap-2">
+          <label id="actor-wrap" class="hidden items-center gap-2 sm:flex">
+            <span class="font-mono text-[9px] uppercase tracking-[.16em] text-slate-500">作業者</span>
+            <select id="actor-select" class="rounded-lg border border-line bg-black/20 px-3 py-1.5 text-xs font-bold"></select>
+            <button id="actor-alias" type="button" class="line-badge is-suggest hidden" title="この端末の持ち主とは別の名義で作業中です。クリックで自分に戻します">別名義</button>
+          </label>
+          <button id="identity-btn" type="button" class="btn btn-ghost btn-sm hidden sm:inline-flex" title="この端末の作業者を設定">👤</button>
+          <button id="sync-pill" type="button" class="sync-pill" title="クリックで接続設定を開く">
+            <span id="sync-dot" class="sync-dot"></span><span id="sync-label">未接続</span>
+          </button>
+          <button id="sync-btn" type="button" class="btn btn-ghost btn-sm">同期</button>
+          <button id="theme-toggle" type="button" class="btn btn-ghost btn-icon" aria-label="ライト/ダーク切り替え">🌙</button>
+          <button id="nav-dashboard" type="button" class="btn btn-secondary btn-sm">案件一覧</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="shell mx-auto max-w-6xl px-5 py-6 sm:px-8">
+
+      <!-- ============ DASHBOARD ============ -->
+      <section id="dashboard-view">
+        <div class="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p class="font-mono text-[10px] uppercase tracking-[.18em] text-acid">Projects</p>
+            <h1 class="mt-1 text-2xl font-extrabold tracking-[-.035em] sm:text-3xl">作詞案件</h1>
+            <p class="mt-1.5 text-xs text-slate-500">共同作詞の全操作をログに残し、貢献比率を算出します。</p>
+          </div>
+          <button id="new-project-btn" type="button" class="btn btn-primary btn-md">＋ 新しい作詞案件</button>
+        </div>
+
+        <div class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div class="glass rounded-xl border border-line p-5"><p class="font-mono text-[10px] uppercase tracking-[.16em] text-slate-600">Projects</p><p id="stat-projects" class="mt-2 text-3xl font-extrabold">0</p></div>
+          <div class="glass rounded-xl border border-line p-5"><p class="font-mono text-[10px] uppercase tracking-[.16em] text-slate-600">Lines</p><p id="stat-lines" class="mt-2 text-3xl font-extrabold text-acid">0</p></div>
+          <div class="glass rounded-xl border border-line p-5"><p class="font-mono text-[10px] uppercase tracking-[.16em] text-slate-600">Open suggestions</p><p id="stat-suggestions" class="mt-2 text-3xl font-extrabold text-amber-400">0</p></div>
+          <div class="glass rounded-xl border border-line p-5"><p class="font-mono text-[10px] uppercase tracking-[.16em] text-slate-600">Work logs</p><p id="stat-logs" class="mt-2 text-3xl font-extrabold text-violet-300">0</p></div>
+        </div>
+
+        <div id="project-grid" class="divide-y divide-line overflow-hidden rounded-2xl border border-line"></div>
+        <div id="empty-projects" class="glass rounded-2xl border border-dashed border-line px-6 py-16 text-center">
+          <p class="text-sm text-slate-500">まだ作詞案件がありません。</p>
+          <p class="mt-1.5 text-xs text-slate-600">「＋ 新しい作詞案件」から始めてください。</p>
+        </div>
+      </section>
+
+      <!-- ============ PROJECT ============ -->
+      <div id="project-view" class="hidden">
+        <div class="mb-4 flex items-start gap-3">
+          <button id="back-dashboard" type="button" class="btn btn-ghost btn-icon shrink-0" aria-label="案件一覧へ">←</button>
+          <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <h1 id="project-header-title" class="truncate text-base font-extrabold">Untitled Lyric</h1>
+              <span id="project-header-status" class="shrink-0 rounded-full border border-line px-2 py-0.5 font-mono text-[9px] text-slate-300">作詞中</span>
+            </div>
+            <div id="project-header-meta" class="mt-1 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] text-slate-500"></div>
+          </div>
+          <button id="edit-project-btn" type="button" class="btn btn-secondary btn-sm shrink-0">編集</button>
+        </div>
+
+        <div class="glass mb-4 rounded-2xl border border-line p-4 sm:p-5">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p class="font-mono text-[9px] uppercase tracking-[.16em] text-slate-500">Current split（ログ算出）</p>
+              <p id="split-headline" class="mt-1 text-lg font-extrabold">—</p>
+            </div>
+            <div class="flex gap-2">
+              <button id="open-members-btn" type="button" class="btn btn-ghost btn-sm">共作者</button>
+              <button id="open-agreement-btn" type="button" class="btn btn-secondary btn-sm font-bold">スプリット合意</button>
+            </div>
+          </div>
+          <div id="split-bar" class="mt-3 flex h-2.5 w-full overflow-hidden rounded-full bg-slate-700"></div>
+          <div id="split-legend" class="mt-2.5 flex flex-wrap gap-x-4 gap-y-1.5 text-[11px]"></div>
+        </div>
+
+        <!-- ワンページを見渡すための細い追従バー -->
+        <div id="jump-bar" class="jump-bar">
+          <span id="jump-split" class="jump-split"></span>
+          <span class="jump-links">
+            <button type="button" class="jump-btn" data-jump="editor">歌詞</button>
+            <button type="button" class="jump-btn" data-jump="preview">プレビュー</button>
+            <button type="button" class="jump-btn" data-jump="panel">提案・分析</button>
+            <button type="button" class="jump-btn" data-jump="top">▲ 先頭</button>
+          </span>
+        </div>
+
+        <div id="workspace" class="workspace">
+
+          <section class="workspace-editor glass rounded-2xl border border-line p-4 sm:p-5">
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p class="font-mono text-[9px] uppercase tracking-[.18em] text-acid">Lyrics</p>
+                <h2 class="mt-0.5 text-sm font-bold">歌詞エディタ</h2>
+              </div>
+              <div id="mode-switch" class="mode-switch" role="tablist" aria-label="編集モード">
+                <button type="button" class="mode-btn is-active" data-mode="edit">✎ 編集</button>
+                <button type="button" class="mode-btn" data-mode="suggest">✍ 提案</button>
+                <button type="button" class="mode-btn" data-mode="comment">💬 コメント</button>
+              </div>
+            </div>
+            <p id="mode-hint" class="mb-3 rounded-lg border border-line bg-black/20 px-3 py-2 text-[11px] leading-5 text-slate-500"></p>
+
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div id="view-switch" class="mode-switch" aria-label="表示">
+                <button type="button" class="mode-btn is-active" data-view="clean" title="行番号やセクション設定をホバー時だけ表示し、歌詞を読みやすくします">すっきり表示</button>
+                <button type="button" class="mode-btn is-active" data-view="colors" title="行の左罫を主著者の色にします">作者色分け</button>
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="font-mono text-[9px] uppercase tracking-[.16em] text-slate-500">呼び名</span>
+                <div id="naming-switch" class="mode-switch" role="tablist" aria-label="セクションの呼び名">
+                  <button type="button" class="mode-btn is-active" data-naming="jp">Aメロ / サビ</button>
+                  <button type="button" class="mode-btn" data-naming="en">Verse / Chorus</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="section-list" class="space-y-4"></div>
+
+            <div class="mt-4 flex flex-wrap gap-2">
+              <button id="add-section-btn" type="button" class="btn btn-secondary btn-sm">＋ セクション追加</button>
+              <button id="import-lyrics-btn" type="button" class="btn btn-ghost btn-sm">歌詞を一括入力</button>
+              <button id="export-lyrics-btn" type="button" class="btn btn-ghost btn-sm">書き出し</button>
+              <button id="preview-show" type="button" class="btn btn-ghost btn-sm hidden">プレビューを表示</button>
+            </div>
+          </section>
+
+          <div class="col-resizer" data-resizer="0" role="separator" aria-orientation="vertical" title="ドラッグで幅を調整（ダブルクリックで既定に戻す）"><span></span></div>
+
+          <!-- プレビュー列 -->
+          <section class="workspace-preview glass rounded-2xl border border-line p-4 sm:p-5">
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p class="font-mono text-[9px] uppercase tracking-[.18em] text-acid">Preview</p>
+                <h2 class="mt-0.5 text-sm font-bold">歌詞プレビュー</h2>
+              </div>
+              <div class="flex items-center gap-2">
+                <button id="preview-copy" type="button" class="btn btn-ghost btn-sm">コピー</button>
+                <button id="preview-toggle" type="button" class="btn btn-ghost btn-sm" title="プレビュー列を隠す">隠す</button>
+              </div>
+            </div>
+            <div id="preview-modes" class="mode-switch mb-3" role="tablist" aria-label="プレビュー表示">
+              <button type="button" class="mode-btn is-active" data-preview="clean">完成形</button>
+              <button type="button" class="mode-btn" data-preview="suggested">提案を反映</button>
+            </div>
+            <div id="preview-doc" class="preview-doc"></div>
+            <div id="preview-stats" class="preview-stats"></div>
+          </section>
+
+          <div class="col-resizer" data-resizer="1" role="separator" aria-orientation="vertical" title="ドラッグで幅を調整（ダブルクリックで既定に戻す）"><span></span></div>
+
+          <section class="workspace-panel glass rounded-2xl border border-line p-4 sm:p-5">
+            <div id="panel-tabs" class="mode-switch mb-3" role="tablist" aria-label="サイドパネル">
+              <button type="button" class="mode-btn is-active" data-tab="suggestions">提案 <span id="tab-count-suggestions" class="tab-count">0</span></button>
+              <button type="button" class="mode-btn" data-tab="comments">コメント <span id="tab-count-comments" class="tab-count">0</span></button>
+              <button type="button" class="mode-btn" data-tab="logs">ログ</button>
+              <button type="button" class="mode-btn" data-tab="analysis">分析</button>
+            </div>
+            <div id="panel-suggestions" class="panel-body"></div>
+            <div id="panel-comments" class="panel-body hidden"></div>
+            <div id="panel-logs" class="panel-body hidden"></div>
+            <div id="panel-analysis" class="panel-body hidden"></div>
+          </section>
+        </div>
+      </div>
+    </main>
+
+    <footer class="shell mx-auto max-w-6xl px-5 pb-10 pt-6 text-center font-mono text-[9px] uppercase tracking-[.2em] text-slate-600 sm:px-8">
+      LYRICLAB · 作業ログは端末内に保存されます
+    </footer>
+  </div>
+
+  <!-- ============ MODALS ============ -->
+  <div id="project-modal" class="modal-backdrop hidden">
+    <form id="project-form" class="modal-box w-full max-w-lg rounded-2xl border border-line bg-panel p-6 shadow-2xl sm:p-7">
+      <div class="flex items-start justify-between gap-3">
+        <div><p class="font-mono text-[10px] uppercase tracking-[.18em] text-acid">Project</p><h2 id="project-modal-title" class="mt-1 text-lg font-bold">作詞案件</h2></div>
+        <button type="button" data-close class="btn btn-ghost btn-icon" aria-label="閉じる">✕</button>
+      </div>
+      <div class="mt-5 grid gap-3 sm:grid-cols-2">
+        <label class="sm:col-span-2"><span class="field-label">タイトル</span><input id="pf-title" required class="field" placeholder="Untitled Lyric"></label>
+        <label><span class="field-label">アーティスト</span><input id="pf-artist" class="field" placeholder="アーティスト名"></label>
+        <label><span class="field-label">ステータス</span><select id="pf-status" class="field"><option>作詞中</option><option>推敲中</option><option>確認待ち</option><option>合意済み</option><option>完了</option></select></label>
+        <label class="sm:col-span-2"><span class="field-label">テーマ・メモ</span><input id="pf-note" class="field" placeholder="例：夏の終わり／別れの手紙"></label>
+        <label class="sm:col-span-2"><span class="field-label">締切</span><input id="pf-deadline" type="date" class="field"></label>
+      </div>
+      <div class="mt-6 flex justify-between gap-3">
+        <button id="pf-delete" type="button" class="btn btn-ghost btn-sm text-rose-400">削除</button>
+        <div class="flex gap-3">
+          <button type="button" data-close class="btn btn-ghost btn-sm">キャンセル</button>
+          <button type="submit" class="btn btn-primary btn-sm">保存</button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <div id="identity-modal" class="modal-backdrop hidden">
+    <form id="identity-form" class="modal-box w-full max-w-md rounded-2xl border border-line bg-panel p-6 shadow-2xl">
+      <div class="flex items-start justify-between gap-3">
+        <div><p class="font-mono text-[10px] uppercase tracking-[.18em] text-acid">This device</p><h2 class="mt-1 text-lg font-bold">この端末の作業者</h2></div>
+        <button type="button" data-close class="btn btn-ghost btn-icon" aria-label="閉じる">✕</button>
+      </div>
+      <p id="identity-lead" class="mt-2 text-[11px] leading-5 text-slate-500">一度決めておけば、以降は自動でこの人として記録されます。ログインは不要です。</p>
+      <label class="mt-5 block"><span class="field-label">あなたの名前</span><input id="identity-name" class="field" placeholder="例：たなか" required></label>
+      <div id="identity-members-wrap" class="mt-4 hidden">
+        <span class="field-label">この案件でのあなた</span>
+        <div id="identity-members" class="space-y-2"></div>
+      </div>
+      <p id="identity-error" class="mt-3 hidden text-xs text-rose-400"></p>
+      <div class="mt-6 flex justify-end gap-3">
+        <button type="button" data-close class="btn btn-ghost btn-sm">あとで</button>
+        <button type="submit" class="btn btn-primary btn-sm">保存</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="members-modal" class="modal-backdrop hidden">
+    <div class="modal-box w-full max-w-md rounded-2xl border border-line bg-panel p-6 shadow-2xl">
+      <div class="flex items-start justify-between gap-3">
+        <div><p class="font-mono text-[10px] uppercase tracking-[.18em] text-acid">Co-writers</p><h2 class="mt-1 text-lg font-bold">共作者</h2></div>
+        <button type="button" data-close class="btn btn-ghost btn-icon" aria-label="閉じる">✕</button>
+      </div>
+      <div id="members-list" class="mt-5 space-y-2"></div>
+      <form id="member-add-form" class="mt-4 flex gap-2">
+        <input id="member-name" class="field flex-1" placeholder="共作者名を追加" required>
+        <button type="submit" class="btn btn-primary btn-sm">追加</button>
+      </form>
+      <p class="mt-3 text-[11px] leading-5 text-slate-600">歌詞やログに貢献記録がある共作者は削除できません。</p>
+    </div>
+  </div>
+
+  <div id="agreement-modal" class="modal-backdrop hidden">
+    <form id="agreement-form" class="modal-box w-full max-w-lg rounded-2xl border border-line bg-panel p-6 shadow-2xl">
+      <div class="flex items-start justify-between gap-3">
+        <div><p class="font-mono text-[10px] uppercase tracking-[.18em] text-acid">Final agreement</p><h2 class="mt-1 text-lg font-bold">スプリット合意</h2></div>
+        <button type="button" data-close class="btn btn-ghost btn-icon" aria-label="閉じる">✕</button>
+      </div>
+      <p class="mt-2 text-xs leading-5 text-slate-500">ログからの算出値は参考値です。最終比率は話し合いで決定してください。</p>
+      <div id="agreement-fields" class="mt-5 space-y-3"></div>
+      <p id="agreement-total" class="mt-3 font-mono text-xs"></p>
+      <div class="mt-6 flex justify-between gap-3">
+        <button id="agreement-reset" type="button" class="btn btn-ghost btn-sm">算出値を入れる</button>
+        <div class="flex gap-3">
+          <button type="button" data-close class="btn btn-ghost btn-sm">キャンセル</button>
+          <button type="submit" class="btn btn-primary btn-sm">合意を保存</button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <div id="ai-modal" class="modal-backdrop hidden">
+    <form id="ai-form" class="modal-box w-full max-w-lg rounded-2xl border border-line bg-panel p-6 shadow-2xl">
+      <div class="flex items-start justify-between gap-3">
+        <div><p class="font-mono text-[10px] uppercase tracking-[.18em] text-acid">Connection</p><h2 class="mt-1 text-lg font-bold">接続設定（AI・同期）</h2></div>
+        <button type="button" data-close class="btn btn-ghost btn-icon" aria-label="閉じる">✕</button>
+      </div>
+      <p class="mt-2 text-[11px] leading-5 text-slate-500">AI分析とスプレッドシート同期は、同じ Apps Script ウェブアプリを使います。接続情報はこの端末にのみ保存されます（キーはタブを閉じると消えます）。</p>
+      <div class="mode-switch mt-4" id="ai-provider-tabs">
+        <button type="button" class="mode-btn is-active" data-provider="gas">Apps Script経由</button>
+        <button type="button" class="mode-btn" data-provider="gemini">Gemini APIキー直接</button>
+      </div>
+      <div id="ai-gas-fields" class="mt-4 grid gap-3">
+        <label><span class="field-label">Apps Script Web App URL</span><input id="ai-gas-url" type="url" class="field" placeholder="https://script.google.com/macros/s/.../exec"></label>
+        <label><span class="field-label">接続キー（API_KEY）</span><input id="ai-gas-key" type="password" autocomplete="off" class="field" placeholder="Script PropertiesのAPI_KEY"></label>
+        <p class="text-[11px] leading-5 text-slate-600">apps-script/Code.gs をデプロイし、Script Propertiesに API_KEY と GEMINI_API_KEY を設定してください。SPLITAPPと同じ手順です。</p>
+      </div>
+      <div id="ai-gemini-fields" class="mt-4 hidden grid gap-3">
+        <label><span class="field-label">Gemini API キー</span><input id="ai-gemini-key" type="password" autocomplete="off" class="field" placeholder="AIza..."></label>
+        <p class="text-[11px] leading-5 text-slate-600">ブラウザから直接 Google の API を呼びます。手軽ですが、キーはこの端末のタブ内にのみ保持されます。共有PCでは Apps Script 経由を推奨します。</p>
+      </div>
+      <label class="mt-4 block"><span class="field-label">モデル</span><input id="ai-model" class="field" placeholder="gemini-3.1-flash-lite"></label>
+      <p id="ai-modal-error" class="mt-3 hidden text-xs text-rose-400"></p>
+      <div class="mt-6 flex justify-between gap-3">
+        <button id="ai-clear" type="button" class="btn btn-ghost btn-sm text-rose-400">接続を解除</button>
+        <div class="flex gap-3">
+          <button type="button" data-close class="btn btn-ghost btn-sm">キャンセル</button>
+          <button type="submit" class="btn btn-primary btn-sm">保存</button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <div id="import-modal" class="modal-backdrop hidden">
+    <form id="import-form" class="modal-box w-full max-w-lg rounded-2xl border border-line bg-panel p-6 shadow-2xl">
+      <div class="flex items-start justify-between gap-3">
+        <div><p class="font-mono text-[10px] uppercase tracking-[.18em] text-acid">Import</p><h2 class="mt-1 text-lg font-bold">歌詞を一括入力</h2></div>
+        <button type="button" data-close class="btn btn-ghost btn-icon" aria-label="閉じる">✕</button>
+      </div>
+      <p class="mt-2 text-[11px] leading-5 text-slate-500">空行でセクションを区切ります。行頭の [Aメロ] [サビ] [大サビ] や [Verse 1] [Chorus] からセクション種別を自動判定します（どちらの表記でもOK）。取り込んだ歌詞は現在の作業者の貢献として記録されます。</p>
+      <textarea id="import-text" rows="12" class="field mt-4 font-mono text-xs leading-6" placeholder="[Aメロ]&#10;夜が明ける前に&#10;君の名前を呼んだ&#10;&#10;[サビ]&#10;..."></textarea>
+      <div class="mt-5 flex justify-end gap-3">
+        <button type="button" data-close class="btn btn-ghost btn-sm">キャンセル</button>
+        <button type="submit" class="btn btn-primary btn-sm">取り込む</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="export-modal" class="modal-backdrop hidden">
+    <div class="modal-box w-full max-w-lg rounded-2xl border border-line bg-panel p-6 shadow-2xl">
+      <div class="flex items-start justify-between gap-3">
+        <div><p class="font-mono text-[10px] uppercase tracking-[.18em] text-acid">Export</p><h2 class="mt-1 text-lg font-bold">書き出し</h2></div>
+        <button type="button" data-close class="btn btn-ghost btn-icon" aria-label="閉じる">✕</button>
+      </div>
+      <div class="mode-switch mt-4" id="export-tabs">
+        <button type="button" class="mode-btn is-active" data-export="lyrics">歌詞</button>
+        <button type="button" class="mode-btn" data-export="report">貢献レポート</button>
+        <button type="button" class="mode-btn" data-export="json">JSON</button>
+      </div>
+      <textarea id="export-text" rows="14" readonly class="field mt-4 font-mono text-xs leading-6"></textarea>
+      <div class="mt-5 flex justify-end gap-3">
+        <button id="export-copy" type="button" class="btn btn-primary btn-sm">コピー</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

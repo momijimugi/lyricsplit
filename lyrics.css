@@ -1,0 +1,643 @@
+/* ==========================================================================
+   LYRICLAB — component layer
+   styles.css (SPLITLAB のデザインシステム) をそのまま流用し、
+   歌詞エディタ固有のコンポーネントだけをここに追加する。
+   色は styles.css の CSS 変数のみを参照すること。
+   ========================================================================== */
+
+/* --- form fields ---------------------------------------------------------- */
+.field {
+  width: 100%;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--surface-muted);
+  color: var(--text-strong);
+  padding: .6rem .85rem;
+  font-size: .875rem;
+  line-height: 1.5;
+  outline: none;
+  transition: border-color .15s ease;
+}
+.field:focus { border-color: rgba(var(--accent-text-rgb), .55); }
+textarea.field { resize: vertical; }
+.field-label {
+  display: block;
+  margin-bottom: .4rem;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+/* --- modal ---------------------------------------------------------------- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow-y: auto;
+  padding: 1.25rem;
+  padding-block: 2.5rem;
+  background: var(--overlay);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+.modal-backdrop.hidden { display: none; }
+
+/* --- mode / tab switch ---------------------------------------------------- */
+.mode-switch {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-muted);
+}
+.mode-btn {
+  border: 0;
+  background: transparent;
+  border-radius: 999px;
+  padding: .4rem .8rem;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  transition: background-color .15s ease, color .15s ease;
+}
+.mode-btn:hover { color: var(--text-strong); }
+.mode-btn.is-active {
+  background: var(--surface);
+  color: var(--text-strong);
+  box-shadow: var(--shadow-xs);
+}
+.tab-count {
+  display: inline-block;
+  min-width: 1.1rem;
+  margin-left: .15rem;
+  border-radius: 999px;
+  background: var(--surface-strong);
+  padding: 0 .3rem;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+}
+
+/* --- lyric sections ------------------------------------------------------- */
+.lyric-section {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+}
+.lyric-section > :last-child { border-radius: 0 0 var(--radius-md) var(--radius-md); }
+/* セクション見出しは歌詞の上端に貼り付く（長い歌詞でも現在地が分かる）。
+   sticky を効かせるため .lyric-section には overflow を掛けないこと。 */
+.lyric-section-head {
+  position: sticky;
+  top: calc(var(--bar-h, 2.4rem) + .5rem);
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .5rem .75rem;
+  border-bottom: 1px solid var(--line-soft);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+.lyric-section-name {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-strong);
+  font-weight: 800;
+  font-size: .8rem;
+  outline: none;
+  padding: .15rem .25rem;
+  border-radius: 4px;
+}
+.lyric-section-name:focus { background: var(--surface-muted); }
+.section-weight {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: .1em;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+.icon-mini {
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 6px;
+  padding: .15rem .4rem;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.icon-mini:hover { color: var(--danger); border-color: var(--line-strong); }
+
+/* --- lyric lines ---------------------------------------------------------- */
+.lyric-line {
+  display: grid;
+  grid-template-columns: 2.1rem 1fr auto;
+  align-items: start;
+  gap: .5rem;
+  padding: .35rem .75rem;
+  border-left: 3px solid transparent;
+  cursor: pointer;
+  transition: background-color .12s ease;
+}
+.lyric-line + .lyric-line { border-top: 1px solid var(--line-soft); }
+.lyric-line:hover { background: var(--surface-hover); }
+.lyric-line.is-open { background: var(--surface-hover); cursor: default; }
+.lyric-line-no {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--text-faint);
+  padding-top: .28rem;
+  text-align: right;
+}
+.lyric-line-text {
+  font-size: .9rem;
+  line-height: 1.65;
+  color: var(--text-body);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.lyric-line-text.is-empty { color: var(--text-faint); font-style: italic; }
+.lyric-line-marks { display: flex; align-items: center; gap: .25rem; padding-top: .2rem; }
+.line-badge {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+  border-radius: 999px;
+  padding: .05rem .4rem;
+  border: 1px solid var(--line-strong);
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+.line-badge.is-suggest { border-color: var(--warn); color: var(--warn); }
+.line-badge.is-comment { border-color: rgba(var(--accent-b-rgb), .5); color: var(--accent-b-text); }
+
+/* authorship stripe on the left of a line */
+.lyric-line[data-owner] { border-left-color: var(--owner-color, transparent); }
+#section-list.no-colors .lyric-line[data-owner] { border-left-color: transparent; }
+
+/* --- すっきり表示 ----------------------------------------------------------
+   編集に必要な操作系（行番号・種別select・比重・削除）は、その行／セクションに
+   ホバーするか中で操作しているときだけ出す。提案とコメントのバッジは
+   「今の状態」を示すものなので常に見せる。 */
+#section-list.is-clean .lyric-line-text { font-size: .95rem; line-height: 1.9; }
+#section-list.is-clean .lyric-line { padding-top: .2rem; padding-bottom: .2rem; }
+#section-list.is-clean .lyric-line + .lyric-line { border-top-color: transparent; }
+#section-list.is-clean .lyric-line:hover + .lyric-line,
+#section-list.is-clean .lyric-line:hover { border-top-color: var(--line-soft); }
+#section-list.is-clean .lyric-line-no,
+#section-list.is-clean .line-badge.is-co,
+#section-list.is-clean [data-kind],
+#section-list.is-clean .section-weight,
+#section-list.is-clean [data-del-section] {
+  opacity: 0;
+  transition: opacity .12s ease;
+}
+#section-list.is-clean .lyric-line:hover .lyric-line-no,
+#section-list.is-clean .lyric-line:hover .line-badge.is-co,
+#section-list.is-clean .lyric-line.is-open .lyric-line-no,
+#section-list.is-clean .lyric-section:hover [data-kind],
+#section-list.is-clean .lyric-section:hover .section-weight,
+#section-list.is-clean .lyric-section:hover [data-del-section],
+#section-list.is-clean .lyric-section:focus-within [data-kind],
+#section-list.is-clean .lyric-section:focus-within .section-weight,
+#section-list.is-clean .lyric-section:focus-within [data-del-section] {
+  opacity: 1;
+}
+/* キーボード操作でも触れるようにする（見えないだけでフォーカスは可能） */
+#section-list.is-clean [data-kind]:focus,
+#section-list.is-clean [data-del-section]:focus { opacity: 1; }
+
+/* --- inline composer ------------------------------------------------------ */
+.composer {
+  grid-column: 1 / -1;
+  margin-top: .4rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: .6rem;
+}
+.composer-label {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: .35rem;
+  display: block;
+}
+.composer textarea {
+  width: 100%;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: var(--surface-muted);
+  color: var(--text-strong);
+  padding: .5rem .6rem;
+  font-size: .875rem;
+  line-height: 1.6;
+  outline: none;
+  resize: vertical;
+}
+.composer textarea:focus { border-color: rgba(var(--accent-text-rgb), .55); }
+.composer-actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .5rem; }
+
+/* --- side panel ----------------------------------------------------------- */
+/* ワンページ構成なので、パネルの中身もページと一緒に流す（内部スクロールなし）。
+   件数が増えがちなログだけは既定で最新分に絞り、ボタンで全件に切り替える。 */
+.panel-body { padding-right: .15rem; }
+.card {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+  padding: .7rem .8rem;
+}
+.card + .card { margin-top: .5rem; }
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: .4rem;
+}
+.card-time {
+  margin-left: auto;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+  color: var(--text-faint);
+}
+.diff-old { color: var(--danger); text-decoration: line-through; }
+.diff-new { color: var(--success); }
+.empty-note {
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 1.5rem 1rem;
+  text-align: center;
+  font-size: .8rem;
+  color: var(--text-faint);
+}
+
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 800;
+  color: #0c1116;
+  flex-shrink: 0;
+}
+
+/* --- analysis ------------------------------------------------------------- */
+.metric { border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--surface-muted); padding: .8rem; }
+.metric + .metric { margin-top: .6rem; }
+.metric-bar { display: flex; height: .45rem; width: 100%; overflow: hidden; border-radius: 999px; background: var(--track-strong); margin-top: .5rem; }
+.metric-note { margin-top: .5rem; font-size: 10px; line-height: 1.5; color: var(--text-faint); }
+
+/* --- workspace layout ------------------------------------------------------
+   広い画面：エディタ ｜ プレビュー（主役・中央） ｜ 提案などのパネル の3カラム。
+   画面いっぱいに広げ、ページ自体はスクロールさせず各カラムの中だけを送る。
+   カラムの境目はドラッグで幅を変えられる（比率は端末に保存）。
+   狭い画面：1カラムに落として通常のページスクロールへ戻す。 */
+.workspace {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1fr;
+  padding-bottom: 30vh;
+}
+.workspace > * { min-width: 0; }
+.workspace.no-preview .workspace-preview { display: none; }
+.col-resizer { display: none; }
+
+@media (min-width: 1024px) {
+  /* ページ全体を画面の高さに固定し、スクロールはカラム内だけにする。 */
+  body[data-app-view="project"] { overflow: hidden; }
+  body[data-app-view="project"] .grid-noise {
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  body[data-app-view="project"] .shell { max-width: none; }
+  body[data-app-view="project"] main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding-bottom: .75rem;
+  }
+  body[data-app-view="project"] footer { display: none; }
+  body[data-app-view="project"] #project-view {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  body[data-app-view="project"] #jump-bar { display: none; }
+
+  .workspace {
+    flex: 1;
+    min-height: 0;
+    gap: 0;
+    padding-bottom: 0;
+    /* 既定は プレビューが最大、エディタが次、パネルが最小。 */
+    grid-template-columns:
+      minmax(15rem, var(--col-editor, 1fr))
+      var(--gutter, .75rem)
+      minmax(18rem, var(--col-preview, 1.55fr))
+      var(--gutter, .75rem)
+      minmax(14rem, var(--col-panel, .85fr));
+  }
+  /* プレビューを隠すと、そのカラムと片方のハンドルが消えて3トラックになる。 */
+  .workspace.no-preview {
+    grid-template-columns:
+      minmax(15rem, var(--col-editor, 1fr))
+      var(--gutter, .75rem)
+      minmax(14rem, var(--col-panel, .85fr));
+  }
+  .workspace.no-preview .col-resizer[data-resizer="0"] { display: none; }
+
+  .workspace > section {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  /* 各カラムで実際にスクロールする領域 */
+  .workspace > section > #section-list,
+  .workspace > section > .preview-doc,
+  .workspace > section > .panel-body:not(.hidden) {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+  }
+  .workspace #section-list { padding-right: .3rem; }
+  /* 3カラムではスクロールする器がカラムの中なので、貼り付き位置はその上端（0）。
+     パネルのタブはスクロール領域の外に出るため貼り付ける必要がない。 */
+  .workspace .lyric-section-head { top: 0; }
+  .workspace #panel-tabs { position: static; }
+
+  /* --- 幅調整ハンドル --- */
+  .col-resizer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: col-resize;
+    touch-action: none;
+  }
+  .col-resizer > span {
+    display: block;
+    width: 2px;
+    height: 2.5rem;
+    border-radius: 999px;
+    background: var(--line-strong);
+    transition: background-color .15s ease, height .15s ease;
+  }
+  .col-resizer:hover > span,
+  .col-resizer.is-dragging > span { background: var(--accent-bg); height: 5rem; }
+}
+/* ドラッグ中は選択が走らないようにする */
+body.is-resizing { user-select: none; cursor: col-resize; }
+
+/* 追従バー：縦に長いワンページでも、今の比率と現在地を見失わないための細い帯。 */
+.jump-bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  margin-bottom: .75rem;
+  padding: .45rem .75rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-xs);
+}
+.jump-split { font-size: 11px; font-weight: 800; color: var(--text-strong); padding-left: .35rem; }
+.jump-links { display: flex; flex-wrap: wrap; gap: .25rem; }
+.jump-btn {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: .25rem .7rem;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  transition: background-color .15s ease, color .15s ease, border-color .15s ease;
+}
+.jump-btn:hover { background: var(--surface-hover); color: var(--text-strong); border-color: var(--line-strong); }
+.jump-btn.is-current { background: var(--surface-strong); color: var(--text-strong); }
+
+/* パネルのタブも貼り付けておくと、下までスクロールしたまま
+   提案 → コメント → ログ → 分析 を切り替えられる。 */
+#panel-tabs {
+  position: sticky;
+  top: calc(var(--bar-h, 2.4rem) + .5rem);
+  z-index: 6;
+  background: var(--surface);
+}
+
+/* --- preview ---------------------------------------------------------------
+   ワンページなので内部スクロールはさせず、歌詞は最後まで流して表示する。 */
+.preview-doc {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+  padding: 1rem 1.1rem;
+}
+/* 全幅に歌詞を流すと視線移動が長くなるので、読み幅だけ抑える。 */
+.preview-section { max-width: 42rem; }
+.preview-section + .preview-section { margin-top: 1.15rem; }
+.preview-section-name {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: .35rem;
+}
+.preview-line {
+  font-size: .95rem;
+  line-height: 1.9;
+  color: var(--text-body);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.preview-line.is-authored { border-left: 2px solid var(--owner-color); padding-left: .55rem; margin-left: -.7rem; }
+.preview-line.is-added { color: var(--success); }
+.preview-line.is-removed { color: var(--danger); text-decoration: line-through; }
+.preview-line .pv-mark {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+  color: var(--text-faint);
+  margin-left: .4rem;
+}
+.preview-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .25rem .9rem;
+  margin-top: .6rem;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: .1em;
+  color: var(--text-faint);
+}
+
+/* --- AI multi-stage analysis ---------------------------------------------- */
+.stage {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+  padding: .75rem .8rem;
+}
+.stage + .stage { margin-top: .5rem; }
+.stage.is-running { border-color: rgba(var(--accent-text-rgb), .5); }
+.stage.is-done { border-color: rgba(22, 163, 74, .35); }
+.stage.is-failed { border-color: rgba(var(--danger-rgb), .45); }
+.stage-head { display: flex; align-items: center; gap: .5rem; }
+.stage-no {
+  display: inline-grid;
+  place-items: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.stage.is-done .stage-no { background: var(--success); border-color: var(--success); color: #fff; }
+.stage.is-running .stage-no { border-color: var(--accent-bg); color: var(--accent-text); }
+.stage.is-failed .stage-no { background: var(--danger); border-color: var(--danger); color: #fff; }
+.stage-title { font-size: .78rem; font-weight: 800; color: var(--text-strong); }
+.stage-state { margin-left: auto; font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 9px; color: var(--text-faint); }
+.stage-body { margin-top: .5rem; font-size: 11px; line-height: 1.6; color: var(--text-muted); }
+.stage-spinner {
+  display: inline-block;
+  width: .7rem; height: .7rem;
+  border: 2px solid var(--line-strong);
+  border-top-color: var(--accent-bg);
+  border-radius: 50%;
+  animation: ll-spin .7s linear infinite;
+}
+@keyframes ll-spin { to { transform: rotate(360deg); } }
+.axis-row + .axis-row { margin-top: .5rem; }
+.axis-row-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .5rem;
+  font-size: 11px;
+  margin-bottom: .25rem;
+}
+.axis-row-head b { color: var(--text-strong); font-weight: 700; }
+.axis-row-head span {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+  color: var(--text-faint);
+  text-align: right;
+}
+.axis-track { height: .35rem; border-radius: 999px; background: var(--track-strong); overflow: hidden; display: flex; }
+
+/* --- 本人選択（端末ひも付け） ----------------------------------------------- */
+#identity-members .card { transition: border-color .15s ease, background-color .15s ease; }
+#identity-members .card:hover { border-color: var(--hover-border); }
+#identity-members .card.is-picked {
+  border-color: rgba(var(--accent-text-rgb), .6);
+  background: rgba(var(--accent-text-rgb), .07);
+}
+#actor-alias { cursor: pointer; }
+
+/* --- 同期ステータス --------------------------------------------------------- */
+.sync-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  padding: .3rem .7rem;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+  transition: border-color .15s ease, color .15s ease;
+}
+.sync-pill:hover { color: var(--text-strong); border-color: var(--hover-border); }
+/* 狭い画面ではヘッダーが詰まるので状態ピルは省く（同期ボタンとトーストで足りる）。 */
+@media (max-width: 640px) { .sync-pill { display: none; } }
+.sync-dot { width: .45rem; height: .45rem; border-radius: 999px; background: var(--text-faint); flex-shrink: 0; }
+.sync-dot.is-on { background: var(--success); }
+.sync-dot.is-error { background: var(--danger); }
+.sync-dot.is-busy { background: var(--warn); animation: ll-pulse 1s ease-in-out infinite; }
+@keyframes ll-pulse { 50% { opacity: .25; } }
+
+/* --- toast ---------------------------------------------------------------- */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 1.75rem;
+  transform: translateX(-50%);
+  z-index: 60;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+  padding: .55rem 1.1rem;
+  font-size: .8rem;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.toast.hidden { display: none; }
+
+/* --- project strip -------------------------------------------------------- */
+.project-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  padding: 1rem 1.25rem;
+  background: var(--surface);
+  text-align: left;
+  transition: background-color .15s ease;
+}
+.project-row:hover { background: var(--surface-hover); }
+
+/* --- 追加ユーティリティ ---------------------------------------------------
+   styles.css の Tailwind ビルドは SPLITAPP で使われたクラスしか含まないため、
+   このアプリで新たに使うユーティリティだけをここで補う。 */
+.grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.text-2xl { font-size: 1.5rem; line-height: 2rem; }
+.h-2\.5 { height: .625rem; }
+.mb-6 { margin-bottom: 1.5rem; }
+.py-6 { padding-top: 1.5rem; padding-bottom: 1.5rem; }
+.pt-6 { padding-top: 1.5rem; }
+.pb-10 { padding-bottom: 2.5rem; }
+.pb-3 { padding-bottom: .75rem; }
+.pl-2\.5 { padding-left: .625rem; }
+.px-1\.5 { padding-left: .375rem; padding-right: .375rem; }
+.gap-y-1 { row-gap: .25rem; }
+.gap-y-1\.5 { row-gap: .375rem; }
+.border-l-2 { border-left-width: 2px; }
+.bg-black\/10 { background-color: rgba(0, 0, 0, .1); }
+@media (min-width: 640px) {
+  .sm\:grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .sm\:text-3xl { font-size: 1.875rem; line-height: 2.25rem; }
+}
+@media (min-width: 1024px) {
+  .lg\:grid-cols-\[1\.35fr_1fr\] { grid-template-columns: 1.35fr 1fr; }
+}

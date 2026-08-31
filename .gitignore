@@ -1,0 +1,19 @@
+# Apps Script のローカル設定（scriptId など環境依存の情報を含む）
+.clasp.json
+.clasprc.json
+
+# 依存関係・ビルド生成物
+node_modules/
+dist/
+
+# エディタ・OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
+
+# 手元の実験用データ（歌詞や作業ログを書き出したものを誤って含めない）
+*.local
+*.local.json
+export-*.json

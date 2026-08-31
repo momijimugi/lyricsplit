@@ -18,12 +18,14 @@
  *    値を入れてデプロイした時点で、Googleログインが必要になる。
  */
 export const firebaseConfig = {
-  apiKey: '',
-  authDomain: '',
-  projectId: '',
-  storageBucket: '',
-  messagingSenderId: '',
-  appId: ''
+  apiKey: 'AIzaSyDGuejFpTXjblX8sCFMDaBxgGKde2p7VKs',
+  authDomain: 'soldb-ebb27.firebaseapp.com',
+  projectId: 'soldb-ebb27',
+  storageBucket: 'soldb-ebb27.firebasestorage.app',
+  messagingSenderId: '941289825290',
+  appId: '1:941289825290:web:e19fbbecb559317f9febf3',
+  // Analytics は使っていないので参照されないが、Console の値をそのまま残しておく。
+  measurementId: 'G-TRCDD1WNVF'
 };
 
 /** 設定が入っているか。未設定のうちは認証をまるごと素通りさせる。 */

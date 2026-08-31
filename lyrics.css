@@ -832,3 +832,31 @@ body.is-resizing { user-select: none; cursor: col-resize; }
 .switch-off { color: var(--text-strong); }
 .switch-input:checked ~ .switch-label { color: var(--text-strong); }
 .switch-input:checked ~ .switch-off { color: var(--text-faint); }
+
+/* --- boot error ----------------------------------------------------------- */
+/* 起動に失敗したときだけ出る。テーマ変数が読めない場合も想定して素の色で書く。 */
+.boot-error {
+  position: fixed;
+  left: 50%;
+  top: 2.5rem;
+  transform: translateX(-50%);
+  z-index: 200;
+  width: min(30rem, calc(100vw - 2rem));
+  padding: 1.25rem;
+  border-radius: 12px;
+  border: 1px solid #b91c1c;
+  background: #fff;
+  color: #1f2937;
+  font-size: 12px;
+  line-height: 1.7;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, .3);
+}
+.boot-error-title { font-size: 14px; font-weight: 800; color: #b91c1c; margin-bottom: .4rem; }
+.boot-error button { margin-top: .8rem; }
+.boot-error-detail {
+  margin-top: .8rem;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  color: #6b7280;
+  word-break: break-word;
+}

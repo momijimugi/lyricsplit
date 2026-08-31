@@ -25,7 +25,13 @@
  */
 
 var SHEET_NAME = 'Projects';
-var PROJECT_HEADERS = ['id', 'title', 'updatedAt', 'deleted', 'dataJson'];
+// chunk / chunks は dataJson の分割用。1セルは5万文字までなので、
+// 長くなった案件は複数行に分けて保存する（詳細は splitJson_ のコメント）。
+var PROJECT_HEADERS = ['id', 'title', 'updatedAt', 'deleted', 'dataJson', 'chunk', 'chunks'];
+var LEGACY_HEADERS = ['id', 'title', 'updatedAt', 'deleted', 'dataJson'];
+// セル上限5万文字に対する安全側の分割幅。
+var CHUNK_CHARS = 40000;
+var MAX_PROJECT_CHARS = 4000000;
 var DEFAULT_MODEL = 'gemini-3.1-flash-lite';
 var MAX_PROMPT_CHARS = 60000;
 var MAX_PUSH_PROJECTS = 200;
@@ -71,14 +77,40 @@ function getSpreadsheet_() {
   return SpreadsheetApp.openById(id);
 }
 
+/**
+ * シートを用意する。
+ * 旧5列（chunk / chunks なし）のシートは、見出しを足すだけで移行できる。
+ * 既存行は chunk が空になるが、読み出し側で「1枚もの」として扱う。
+ */
 function ensureSheet_(spreadsheet, name, headers) {
   var sheet = spreadsheet.getSheetByName(name) || spreadsheet.insertSheet(name);
+  if (sheet.getMaxColumns() < headers.length) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), headers.length - sheet.getMaxColumns());
+  }
   var first = sheet.getRange(1, 1, 1, headers.length).getValues()[0];
-  if (String(first[0]) !== headers[0]) {
+  var needsHeader = false;
+  for (var i = 0; i < headers.length; i++) {
+    if (String(first[i]) !== headers[i]) { needsHeader = true; break; }
+  }
+  if (needsHeader) {
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
     sheet.setFrozenRows(1);
   }
   return sheet;
+}
+
+/**
+ * スプレッドシートの1セルは5万文字まで。案件データは歌詞・提案・コメントに
+ * 加えて作業ログを全部持つので、少し使い込むとすぐに超える（ログ200件強で到達）。
+ * そこで dataJson を CHUNK_CHARS ごとに切り、同じ id の行を複数並べて保存する。
+ * 行の並び順には依存せず、chunk 列の番号で組み立て直す。
+ */
+function splitJson_(text) {
+  var parts = [];
+  for (var i = 0; i < text.length; i += CHUNK_CHARS) {
+    parts.push(text.slice(i, i + CHUNK_CHARS));
+  }
+  return parts.length ? parts : [''];
 }
 
 function projectSheet_() {
@@ -90,14 +122,28 @@ function pullProjects_() {
   var last = sheet.getLastRow();
   if (last < 2) return [];
   var rows = sheet.getRange(2, 1, last - 1, PROJECT_HEADERS.length).getValues();
-  var out = [];
+
+  // 同じ id の行を集めてから、chunk の番号順に連結して1つのJSONに戻す。
+  var byId = {};
+  var order = [];
   rows.forEach(function (row) {
-    if (!row[0] || row[3] === true || String(row[3]) === 'TRUE') return; // 削除済みは返さない
+    var id = String(row[0] || '');
+    if (!id) return;
+    if (row[3] === true || String(row[3]) === 'TRUE') return; // 削除済みは返さない
+    if (!byId[id]) { byId[id] = []; order.push(id); }
+    var chunk = Number(row[5]);
+    byId[id].push({ chunk: isFinite(chunk) ? chunk : 0, text: String(row[4] || '') });
+  });
+
+  var out = [];
+  order.forEach(function (id) {
+    var parts = byId[id].sort(function (a, b) { return a.chunk - b.chunk; });
+    var text = parts.map(function (p) { return p.text; }).join('');
     try {
-      var project = JSON.parse(row[4]);
+      var project = JSON.parse(text);
       if (project && project.id) out.push(project);
     } catch (e) {
-      // 壊れた行は無視して同期自体は続行する
+      // 壊れた／欠けた行は無視して同期自体は続行する
     }
   });
   return out;
@@ -112,44 +158,70 @@ function pushProjects_(projects) {
   lock.waitLock(20000);
   try {
     var sheet = projectSheet_();
+    var width = PROJECT_HEADERS.length;
     var last = sheet.getLastRow();
-    var ids = last < 2 ? [] : sheet.getRange(2, 1, last - 1, 1).getValues().map(function (r) { return String(r[0]); });
+    var existing = last < 2 ? [] : sheet.getRange(2, 1, last - 1, width).getValues();
 
-    var appended = [];
+    // 案件ごとの行数が変わりうるので、対象idの行はいったん全部落としてから書き直す。
+    var targets = {};
+    var rows = [];
     projects.forEach(function (project) {
       if (!project || !project.id) return;
-      var row = [
-        String(project.id),
-        String(project.title || ''),
-        String(project.updatedAt || ''),
-        false,
-        JSON.stringify(project)
-      ];
-      var index = ids.indexOf(String(project.id));
-      if (index >= 0) sheet.getRange(index + 2, 1, 1, PROJECT_HEADERS.length).setValues([row]);
-      else { appended.push(row); ids.push(String(project.id)); }
+      var id = String(project.id);
+      var text = JSON.stringify(project);
+      if (text.length > MAX_PROJECT_CHARS) {
+        throw new Error('案件「' + String(project.title || id) + '」のデータが大きすぎます（' +
+          text.length + '文字）。');
+      }
+      targets[id] = true;
+      var parts = splitJson_(text);
+      parts.forEach(function (part, index) {
+        rows.push([
+          id,
+          index === 0 ? String(project.title || '') : '',
+          index === 0 ? String(project.updatedAt || '') : '',
+          false,
+          part,
+          index,
+          parts.length
+        ]);
+      });
     });
-    if (appended.length) {
-      sheet.getRange(sheet.getLastRow() + 1, 1, appended.length, PROJECT_HEADERS.length).setValues(appended);
+    if (!rows.length) return 0;
+
+    // 対象id以外の行はそのまま残す。書き戻しは1回にまとめる。
+    var kept = existing.filter(function (row) {
+      var id = String(row[0] || '');
+      return id && !targets[id];
+    });
+    var next = kept.concat(rows);
+
+    if (existing.length) sheet.getRange(2, 1, existing.length, width).clearContent();
+    if (next.length > sheet.getMaxRows() - 1) {
+      sheet.insertRowsAfter(sheet.getMaxRows(), next.length + 1 - sheet.getMaxRows());
     }
+    sheet.getRange(2, 1, next.length, width).setValues(next);
     return projects.length;
   } finally {
     lock.releaseLock();
   }
 }
 
-/** 行は消さず deleted フラグを立てる（誤操作からの復旧用）。 */
+/** 行は消さず deleted フラグを立てる（誤操作からの復旧用）。分割された行はすべて立てる。 */
 function deleteProject_(payload) {
   var id = payload && String(payload.id || '');
   if (!id) throw new Error('削除する案件IDがありません。');
   var sheet = projectSheet_();
   var last = sheet.getLastRow();
   if (last < 2) return false;
-  var ids = sheet.getRange(2, 1, last - 1, 1).getValues().map(function (r) { return String(r[0]); });
-  var index = ids.indexOf(id);
-  if (index < 0) return false;
-  sheet.getRange(index + 2, 4).setValue(true);
-  return true;
+  var ids = sheet.getRange(2, 1, last - 1, 1).getValues();
+  var hit = false;
+  for (var i = 0; i < ids.length; i++) {
+    if (String(ids[i][0]) !== id) continue;
+    sheet.getRange(i + 2, 4).setValue(true);
+    hit = true;
+  }
+  return hit;
 }
 
 /* ----------------------------------------------------------------- Gemini */

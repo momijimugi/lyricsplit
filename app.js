@@ -1766,6 +1766,14 @@
       return data;
     } catch (e) {
       if (e && e.name === 'AbortError') throw new Error('Apps Scriptへの接続がタイムアウトしました。');
+      // CORSで弾かれると fetch は理由を伏せた TypeError しか投げないため、
+      // 画面には「原因の候補」を出す。ほとんどはデプロイのアクセス設定。
+      if (e instanceof TypeError) {
+        throw new Error('Apps Scriptに接続できませんでした（CORSブロック）。'
+          + 'デプロイの「アクセスできるユーザー」が「全員」になっているか確認してください。'
+          + 'ログインが必要な設定だと、ブラウザからは接続できません。'
+          + 'コードを更新した場合は、新しいバージョンとしてデプロイし直す必要があります。');
+      }
       throw e;
     } finally {
       clearTimeout(timer);

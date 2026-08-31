@@ -81,6 +81,17 @@
 
   const PATCH_NOTES = [
     {
+      version: '1.7.0',
+      date: '2026-08-31',
+      title: '名前の扱いを整理',
+      items: [
+        '共作者の名前は一度決めたら固定になり、「名前を修正」からだけ変えられるようにしました',
+        '名前を直しても、これまでの作業ログや貢献はその人のまま引き継がれます',
+        'この端末の作業者名も同じように固定表示にしました',
+        '接続先の名前は、これまで通り接続設定からいつでも変更できます'
+      ]
+    },
+    {
       version: '1.6.0',
       date: '2026-08-31',
       title: '接続先（ワークスペース）の切り替え',
@@ -199,6 +210,7 @@
     previewOn: true,
     logsAll: false,   // 作業ログを全件表示するか
     composer: null,   // { sectionId, lineId|null, mode, kind }
+    renamingMember: null, // 名前の修正を開いている共作者のid
     replyTo: null,    // comment id
     sugReplyTo: null, // suggestion id（提案へのコメント入力を開いている対象）
     sugCounterTo: null, // suggestion id（対案の入力を開いている対象）
@@ -392,10 +404,25 @@
     return false;
   }
 
+  // 端末の名前を書き換え中かどうか。既定は固定表示。
+  let identityEditing = false;
+
+  function renderIdentityName() {
+    const named = deviceNamed();
+    const locked = named && !identityEditing;
+    $('identity-name').readOnly = locked;
+    $('identity-name').classList.toggle('is-locked', locked);
+    $('identity-name-edit').classList.toggle('hidden', !locked);
+    $('identity-name-note').classList.toggle('hidden', !identityEditing);
+    if (identityEditing) { $('identity-name').focus(); $('identity-name').select(); }
+  }
+
   function openIdentityModal(force) {
     const p = project();
+    identityEditing = false;
     $('identity-name').value = (device && device.name) || '';
     $('identity-error').classList.add('hidden');
+    renderIdentityName();
     $('identity-lead').textContent = force
       ? 'この案件でのあなたを選んでください。以降この端末では自動で選ばれます。'
       : '一度決めておけば、以降は自動でこの人として記録されます。ログインは不要です。';
@@ -1589,19 +1616,71 @@
     openModal('project-modal');
   }
 
+  /**
+   * 共作者の一覧。
+   * 名前は一度決めたら固定で、書き換えるには「名前を修正」を通す。
+   * 作業ログ・クレジット・合意値はすべて共作者IDで紐づいているので、
+   * 名前を直しても過去の記録との対応は崩れない。
+   */
   function renderMembers() {
     const p = project();
     const res = analyze(p);
     $('members-list').innerHTML = p.members.map((m) => {
       const used = p.logs.some((l) => l.actorId === m.id) ||
         p.sections.some((s) => s.lines.some((l) => (l.credits || {})[m.id]));
+
+      if (ui.renamingMember === m.id) {
+        return '<div class="card">' +
+          '<div class="flex items-center gap-2">' +
+            '<span class="avatar" style="background:' + m.color + '">' + esc(m.name.slice(0, 1)) + '</span>' +
+            '<input id="member-rename-input" class="field flex-1" value="' + esc(m.name) + '">' +
+          '</div>' +
+          '<p class="member-note">これまでの作業ログや貢献はこの人のまま引き継がれます。' +
+            (used ? '' : 'まだ作業の記録はありません。') + '</p>' +
+          '<div class="composer-actions">' +
+            '<button type="button" class="btn btn-primary btn-sm" data-member-save="' + m.id + '">名前を保存</button>' +
+            '<button type="button" class="btn btn-ghost btn-sm" data-member-cancel="1">キャンセル</button>' +
+          '</div>' +
+        '</div>';
+      }
+
       return '<div class="card flex items-center gap-2">' +
         '<span class="avatar" style="background:' + m.color + '">' + esc(m.name.slice(0, 1)) + '</span>' +
-        '<input class="field flex-1" data-member-name="' + m.id + '" value="' + esc(m.name) + '">' +
+        '<b class="flex-1 text-sm">' + esc(m.name) + '</b>' +
         '<span class="font-mono text-[10px] text-slate-500">' + res.percent[m.id].toFixed(1) + '%</span>' +
+        '<button type="button" class="btn btn-ghost btn-sm" data-member-rename="' + m.id + '">名前を修正</button>' +
         (used || p.members.length <= 2 ? '' : '<button type="button" class="icon-mini" data-member-del="' + m.id + '">✕</button>') +
       '</div>';
     }).join('');
+  }
+
+  /**
+   * 共作者の名前を書き換える。
+   * この端末の持ち主だった場合は、端末側に覚えている名前も一緒に直す。
+   * そのままだと「同じ名前の共作者を自分とみなす」照合が効かなくなるため、
+   * 先に他の案件での対応付けを固定してから名前を移す。
+   */
+  function renameMember(p, m, name) {
+    const before = m.name;
+    if (!name || name === before) return false;
+
+    const own = deviceMemberOf(p);
+    const isSelf = !!(own && own.id === m.id);
+    if (isSelf && device.name === before) {
+      // 旧名で照合していた案件を、IDでの対応付けに書き換えてから名前を変える。
+      projects.forEach((other) => {
+        if (device.memberByProject[other.id]) return;
+        const hit = other.members.find((x) => x.name === before);
+        if (hit) device.memberByProject[other.id] = hit.id;
+      });
+      device.memberByProject[p.id] = m.id;
+      device.name = name;
+      saveDevice();
+    }
+
+    m.name = name;
+    p.updatedAt = nowISO();
+    return true;
   }
 
   function renderAgreement() {
@@ -2550,6 +2629,8 @@
       b.classList.add('is-picked');
     });
 
+    $('identity-name-edit').addEventListener('click', () => { identityEditing = true; renderIdentityName(); });
+
     $('identity-form').addEventListener('submit', (e) => {
       e.preventDefault();
       const p = project();
@@ -2562,8 +2643,16 @@
         err.textContent = 'この案件でのあなたを選んでください。'; err.classList.remove('hidden'); return;
       }
 
+      const beforeName = device.name || '';
+      if (beforeName && beforeName !== name) {
+        // 端末の名前を直したときは、この案件での自分の表示名も同じように直す。
+        // ログはIDで紐づいているので、過去の記録との対応は崩れない。
+        const own = p ? deviceMemberOf(p) : null;
+        if (own) renameMember(p, own, name);
+      }
       device.name = name;
       saveDevice();
+      identityEditing = false;
 
       if (p && picked) {
         if (picked.dataset.pickMember === 'new') {
@@ -2947,24 +3036,58 @@
     $('help-btn').addEventListener('click', () => openModal('help-modal'));
     $('patch-btn').addEventListener('click', openPatchNotes);
 
-    $('open-members-btn').addEventListener('click', () => { renderMembers(); openModal('members-modal'); });
+    $('open-members-btn').addEventListener('click', () => { ui.renamingMember = null; renderMembers(); openModal('members-modal'); });
 
-    $('members-list').addEventListener('change', (e) => {
+    $('members-list').addEventListener('click', (e) => {
       const p = project();
-      const el = e.target.closest('[data-member-name]');
-      if (!el) return;
-      const m = memberOf(p, el.dataset.memberName);
-      m.name = el.value.trim() || m.name;
+
+      const open = e.target.closest('[data-member-rename]');
+      if (open) {
+        ui.renamingMember = open.dataset.memberRename;
+        renderMembers();
+        const t = $('member-rename-input');
+        if (t) { t.focus(); t.select(); }
+        return;
+      }
+      if (e.target.closest('[data-member-cancel]')) { ui.renamingMember = null; renderMembers(); return; }
+
+      const ok = e.target.closest('[data-member-save]');
+      if (ok) {
+        const m = memberOf(p, ok.dataset.memberSave);
+        const t = $('member-rename-input');
+        const name = t ? t.value.trim() : '';
+        if (!m) return;
+        if (!name) { toast('名前が空です'); return; }
+        if (name === m.name) { ui.renamingMember = null; renderMembers(); return; }
+        if (p.members.some((x) => x.id !== m.id && x.name === name)) {
+          toast('同じ名前の共作者がすでにいます');
+          return;
+        }
+        if (!confirm('「' + m.name + '」を「' + name + '」に変更します。\n' +
+          'これまでの作業ログと貢献はそのまま引き継がれます。よろしいですか？')) return;
+        renameMember(p, m, name);
+        ui.renamingMember = null;
+        save(); renderMembers(); renderProject();
+        toast('名前を変更しました');
+        return;
+      }
+
+      const del = e.target.closest('[data-member-del]');
+      if (!del) return;
+      p.members = p.members.filter((m) => m.id !== del.dataset.memberDel);
+      if (!memberOf(p, ui.actorId)) ui.actorId = p.members[0].id;
+      ui.renamingMember = null;
       save(); renderMembers(); renderProject();
     });
 
-    $('members-list').addEventListener('click', (e) => {
-      const del = e.target.closest('[data-member-del]');
-      if (!del) return;
-      const p = project();
-      p.members = p.members.filter((m) => m.id !== del.dataset.memberDel);
-      if (!memberOf(p, ui.actorId)) ui.actorId = p.members[0].id;
-      save(); renderMembers(); renderProject();
+    $('members-list').addEventListener('keydown', (e) => {
+      if (e.target.id !== 'member-rename-input') return;
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const btn = $('members-list').querySelector('[data-member-save]');
+        if (btn) btn.click();
+      }
+      if (e.key === 'Escape') { ui.renamingMember = null; renderMembers(); }
     });
 
     $('member-add-form').addEventListener('submit', (e) => {

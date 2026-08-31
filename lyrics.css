@@ -1047,3 +1047,12 @@ html[data-auth="out"] .grid-noise { display: none; }
   color: var(--text-faint);
   text-align: center;
 }
+
+/* 名前は一度決めたら固定。修正中だけ入力できる。 */
+.field.is-locked {
+  background: var(--surface-muted);
+  color: var(--text-muted);
+  cursor: default;
+}
+.member-note { margin-top: .45rem; font-size: 10px; line-height: 1.7; color: var(--text-faint); }
+.member-note.hidden { display: none; }

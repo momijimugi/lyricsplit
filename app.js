@@ -81,6 +81,16 @@
 
   const PATCH_NOTES = [
     {
+      version: '1.4.0',
+      date: '2026-08-31',
+      title: 'Googleログイン（試験導入）',
+      items: [
+        'Firebase Authentication によるGoogleログインを追加しました',
+        'ログインするとヘッダーにアカウント名とログアウトボタンが出ます',
+        '接続設定や作詞データの持ち方は今までと変わりません'
+      ]
+    },
+    {
       version: '1.3.1',
       date: '2026-08-31',
       title: '読み込み失敗の修正',

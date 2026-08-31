@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="歌詞コライトを提案モード・コメントモードで共同作詞し、その作業ログから貢献パーセンテージを算出するスプリット管理アプリ。">
   <title>LYRICLAB — Lyric Co-write Split</title>
+  <script>document.documentElement.dataset.auth='checking';</script>
   <script>(function(){try{var t=localStorage.getItem('lyriclab_theme');if(!t)t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.dataset.theme=t;}catch(e){}})();</script>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48">
@@ -12,10 +13,29 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Noto+Sans+JP:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=1.3.1">
-  <link rel="stylesheet" href="lyrics.css?v=1.3.1">
+  <link rel="stylesheet" href="styles.css?v=1.4.0">
+  <link rel="stylesheet" href="lyrics.css?v=1.4.0">
 </head>
 <body class="min-h-screen text-slate-100 antialiased selection:bg-acid selection:text-ink">
+
+  <!-- ============ AUTH GATE ============
+       認証状態が決まるまでは本体もログイン画面も出さない（checking）。
+       未ログインならここだけ、ログイン済みなら本体だけが見える。 -->
+  <div id="auth-checking" class="auth-screen">
+    <p class="auth-checking-note">確認中…</p>
+  </div>
+
+  <div id="auth-gate" class="auth-screen">
+    <div class="auth-card">
+      <span class="auth-mark">LL</span>
+      <p class="font-mono text-[10px] uppercase tracking-[.2em] text-slate-500">Lyric co-write split</p>
+      <h1 class="auth-title">LYRICLAB</h1>
+      <p class="auth-lead">共同作詞をはじめるにはログインしてください。</p>
+      <button id="auth-signin" type="button" class="btn btn-primary btn-md auth-signin">Googleでログイン</button>
+      <p id="auth-error" class="auth-error hidden"></p>
+    </div>
+  </div>
+
   <div class="grid-noise min-h-screen">
 
     <header class="border-b border-white/5">
@@ -41,6 +61,12 @@
           <button id="patch-btn" type="button" class="btn btn-ghost btn-sm patch-btn" title="更新履歴を見る">更新履歴<span id="patch-dot" class="patch-dot hidden"></span></button>
           <button id="theme-toggle" type="button" class="btn btn-ghost btn-sm" aria-label="ライト/ダーク切り替え">テーマ</button>
           <button id="nav-dashboard" type="button" class="btn btn-secondary btn-sm">案件一覧</button>
+          <span id="auth-user" class="auth-user hidden">
+            <img id="auth-user-photo" class="auth-user-photo hidden" alt="" referrerpolicy="no-referrer">
+            <span id="auth-user-initial" class="auth-user-initial hidden"></span>
+            <span id="auth-user-name" class="auth-user-name"></span>
+            <button id="auth-signout" type="button" class="btn btn-ghost btn-sm">ログアウト</button>
+          </span>
         </div>
       </div>
     </header>
@@ -406,6 +432,7 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script src="app.js?v=1.3.1"></script>
+  <script src="app.js?v=1.4.0"></script>
+  <script type="module" src="auth.js?v=1.4.0"></script>
 </body>
 </html>

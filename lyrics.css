@@ -140,7 +140,7 @@ textarea.field { resize: vertical; }
 /* --- lyric lines ---------------------------------------------------------- */
 .lyric-line {
   display: grid;
-  grid-template-columns: 2.1rem 1fr auto;
+  grid-template-columns: 2.1rem minmax(0, 1fr) minmax(4.75rem, auto);
   align-items: start;
   gap: .5rem;
   padding: .35rem .75rem;
@@ -166,7 +166,7 @@ textarea.field { resize: vertical; }
   word-break: break-word;
 }
 .lyric-line-text.is-empty { color: var(--text-faint); font-style: italic; }
-.lyric-line-marks { display: flex; align-items: center; gap: .25rem; padding-top: .2rem; }
+.lyric-line-marks { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .25rem; padding-top: .2rem; }
 .line-badge {
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 9px;
@@ -181,39 +181,6 @@ textarea.field { resize: vertical; }
 
 /* authorship stripe on the left of a line */
 .lyric-line[data-owner] { border-left-color: var(--owner-color, transparent); }
-#section-list.no-colors .lyric-line[data-owner] { border-left-color: transparent; }
-
-/* --- すっきり表示 ----------------------------------------------------------
-   編集に必要な操作系（行番号・種別select・比重・削除）は、その行／セクションに
-   ホバーするか中で操作しているときだけ出す。提案とコメントのバッジは
-   「今の状態」を示すものなので常に見せる。 */
-#section-list.is-clean .lyric-line-text { font-size: .95rem; line-height: 1.9; }
-#section-list.is-clean .lyric-line { padding-top: .2rem; padding-bottom: .2rem; }
-#section-list.is-clean .lyric-line + .lyric-line { border-top-color: transparent; }
-#section-list.is-clean .lyric-line:hover + .lyric-line,
-#section-list.is-clean .lyric-line:hover { border-top-color: var(--line-soft); }
-#section-list.is-clean .lyric-line-no,
-#section-list.is-clean .line-badge.is-co,
-#section-list.is-clean [data-kind],
-#section-list.is-clean .section-weight,
-#section-list.is-clean [data-del-section] {
-  opacity: 0;
-  transition: opacity .12s ease;
-}
-#section-list.is-clean .lyric-line:hover .lyric-line-no,
-#section-list.is-clean .lyric-line:hover .line-badge.is-co,
-#section-list.is-clean .lyric-line.is-open .lyric-line-no,
-#section-list.is-clean .lyric-section:hover [data-kind],
-#section-list.is-clean .lyric-section:hover .section-weight,
-#section-list.is-clean .lyric-section:hover [data-del-section],
-#section-list.is-clean .lyric-section:focus-within [data-kind],
-#section-list.is-clean .lyric-section:focus-within .section-weight,
-#section-list.is-clean .lyric-section:focus-within [data-del-section] {
-  opacity: 1;
-}
-/* キーボード操作でも触れるようにする（見えないだけでフォーカスは可能） */
-#section-list.is-clean [data-kind]:focus,
-#section-list.is-clean [data-del-section]:focus { opacity: 1; }
 
 /* --- inline composer ------------------------------------------------------ */
 .composer {
@@ -273,6 +240,8 @@ textarea.field { resize: vertical; }
   font-size: 9px;
   color: var(--text-faint);
 }
+.thread-item { margin-top: .5rem; border-left: 2px solid var(--line-strong); padding-left: .6rem; }
+
 .diff-old { color: var(--danger); text-decoration: line-through; }
 .diff-new { color: var(--success); }
 .empty-note {
@@ -301,6 +270,57 @@ textarea.field { resize: vertical; }
 .metric + .metric { margin-top: .6rem; }
 .metric-bar { display: flex; height: .45rem; width: 100%; overflow: hidden; border-radius: 999px; background: var(--track-strong); margin-top: .5rem; }
 .metric-note { margin-top: .5rem; font-size: 10px; line-height: 1.5; color: var(--text-faint); }
+
+/* --- project top bar -------------------------------------------------------
+   タイトル・操作・スプリット比率を1枚の細いバーにまとめ、
+   その下の歌詞エディタへ縦を明け渡す（SPLITAPPのヘッダーと同じ考え方）。 */
+.project-top { padding: .55rem .75rem; }
+.project-top-main {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+}
+.project-top-id { min-width: 0; flex: 1 1 auto; }
+.project-top-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .35rem;
+  flex-shrink: 0;
+}
+.project-top-split { margin-top: .4rem; }
+.split-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .3rem .9rem;
+  font-size: 11px;
+}
+.split-caption {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.split-bar {
+  display: flex;
+  height: .35rem;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--track-strong);
+  margin-top: .35rem;
+}
+
+@media (min-width: 900px) {
+  /* 広い画面では1段に収め、比率バーは右半分に置く。 */
+  .project-top { display: flex; align-items: center; gap: 1rem; }
+  .project-top-main { flex: 1 1 22rem; min-width: 0; }
+  .project-top-split { margin-top: 0; flex: 1 1 20rem; min-width: 14rem; }
+  .project-top-actions { order: 3; }
+}
 
 /* --- workspace layout ------------------------------------------------------
    広い画面：エディタ ｜ プレビュー（主役・中央） ｜ 提案などのパネル の3カラム。
@@ -334,6 +354,14 @@ textarea.field { resize: vertical; }
     display: flex;
     flex-direction: column;
     padding-bottom: .75rem;
+    /* .grid-noise は縦方向のフレックスなので、main の mx-auto（cross軸のauto余白）が
+       stretch を打ち消し、幅が中身の max-content で決まってしまう。
+       すると提案バッジが増えた瞬間などにページ幅そのものが動く。
+       ここでは必ず全幅に固定する。 */
+    width: 100%;
+    align-self: stretch;
+    margin-left: 0;
+    margin-right: 0;
   }
   body[data-app-view="project"] footer { display: none; }
   body[data-app-view="project"] #project-view {
@@ -379,6 +407,8 @@ textarea.field { resize: vertical; }
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
+    /* モードを変えて中身の高さが変わってもスクロールバーぶんの幅がずれない */
+    scrollbar-gutter: stable;
   }
   .workspace #section-list { padding-right: .3rem; }
   /* 3カラムではスクロールする器がカラムの中なので、貼り付き位置はその上端（0）。
@@ -485,6 +515,25 @@ body.is-resizing { user-select: none; cursor: col-resize; }
   color: var(--text-faint);
   margin-left: .4rem;
 }
+/* プレビューに寄り添う未解決コメント。歌詞本文と混ざらないよう一段下げる。 */
+.preview-note {
+  margin: .1rem 0 .35rem;
+  padding: .3rem .5rem .3rem .55rem;
+  border-left: 2px solid var(--owner-color, var(--line-strong));
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--surface-muted);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.preview-note-who {
+  font-weight: 800;
+  color: var(--text-strong);
+  margin-right: .4rem;
+}
+
 .preview-stats {
   display: flex;
   flex-wrap: wrap;
@@ -641,3 +690,33 @@ body.is-resizing { user-select: none; cursor: col-resize; }
 @media (min-width: 1024px) {
   .lg\:grid-cols-\[1\.35fr_1fr\] { grid-template-columns: 1.35fr 1fr; }
 }
+
+/* --- help modal ----------------------------------------------------------- */
+.help-doc {
+  max-height: 60vh;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding-right: .4rem;
+  font-size: 12px;
+  line-height: 1.75;
+  color: var(--text-muted);
+}
+.help-doc h3 {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-strong);
+  margin-top: 1.1rem;
+  padding-bottom: .3rem;
+  border-bottom: 1px solid var(--line-soft);
+}
+.help-doc h3:first-child { margin-top: 0; }
+.help-doc p, .help-doc ul, .help-doc dl { margin-top: .5rem; }
+.help-doc ul { padding-left: 1.1rem; list-style: disc; }
+.help-doc li + li { margin-top: .25rem; }
+.help-doc b { color: var(--text-strong); font-weight: 700; }
+.help-doc dt {
+  font-weight: 800;
+  color: var(--text-strong);
+  margin-top: .45rem;
+}
+.help-doc dd { margin: 0; padding-left: .1rem; }

@@ -626,6 +626,8 @@ body.is-resizing { user-select: none; cursor: col-resize; }
   transition: border-color .15s ease, color .15s ease;
 }
 .sync-pill:hover { color: var(--text-strong); border-color: var(--hover-border); }
+/* .sync-pill の display 指定が汎用の .hidden に勝ってしまうため、明示的に落とす。 */
+.sync-pill.hidden { display: none; }
 /* 狭い画面ではヘッダーが詰まるので状態ピルは省く（同期ボタンとトーストで足りる）。 */
 @media (max-width: 640px) { .sync-pill { display: none; } }
 .sync-dot { width: .45rem; height: .45rem; border-radius: 999px; background: var(--text-faint); flex-shrink: 0; }

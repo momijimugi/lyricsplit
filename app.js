@@ -426,14 +426,69 @@
   /* ------------------------------------------------------------ 表示 */
 
   function renderAll() {
+    // 未接続のまま編集するとシートと食い違うので、入口で接続画面へ戻す。
+    if (needsConnect()) ui.view = 'connect';
+    else if (ui.view === 'connect') ui.view = 'dashboard';
     document.body.dataset.appView = ui.view;
+    $('connect-view').classList.toggle('hidden', ui.view !== 'connect');
     $('dashboard-view').classList.toggle('hidden', ui.view !== 'dashboard');
     $('project-view').classList.toggle('hidden', ui.view !== 'project');
     $('actor-wrap').classList.toggle('hidden', ui.view !== 'project');
     if (ui.view === 'project') $('actor-wrap').classList.add('sm:flex');
     $('identity-btn').classList.toggle('hidden', ui.view !== 'project');
-    if (ui.view === 'dashboard') renderDashboard();
+    // 入口の接続画面では、まだ使えない操作を並べない。
+    ['sync-pill', 'sync-btn', 'nav-dashboard'].forEach((id) =>
+      $(id).classList.toggle('hidden', ui.view === 'connect'));
+    if (ui.view === 'connect') renderConnect();
+    else if (ui.view === 'dashboard') renderDashboard();
     else { renderProject(); updateJumpCurrent(); }
+  }
+
+  /** 接続画面。前回のURLは端末に残っているので、鍵だけ入れれば戻れる状態にする。 */
+  function renderConnect() {
+    const cfg = aiConfig();
+    if (!$('cn-url').value) $('cn-url').value = cfg.url || '';
+    $('connect-error').classList.add('hidden');
+    const submit = $('connect-submit');
+    submit.disabled = false;
+    submit.textContent = '接続して開く';
+    ($('cn-url').value ? $('cn-key') : $('cn-url')).focus();
+  }
+
+  async function submitConnect() {
+    const url = $('cn-url').value.trim();
+    const key = $('cn-key').value;
+    const err = $('connect-error');
+    const submit = $('connect-submit');
+    if (!url || !key) {
+      err.textContent = 'URLと接続キーの両方を入力してください。';
+      err.classList.remove('hidden');
+      return;
+    }
+    const cfg = aiConfig();
+    err.classList.add('hidden');
+    submit.disabled = true;
+    submit.textContent = '接続を確認中…';
+    // 打ち間違いに気づかないまま編集を始めないよう、実際に通信して確かめる。
+    saveAiConfig({ provider: 'gas', url: url, model: cfg.model || AI_DEFAULT_MODEL, gasKey: key, geminiKey: cfg.geminiKey || '' });
+    try {
+      await gasPost('pull', null, 20000);
+    } catch (e) {
+      try { sessionStorage.removeItem(AI_SECRET_KEY); } catch (e2) {}
+      err.textContent = (e && e.message) || String(e);
+      err.classList.remove('hidden');
+      submit.disabled = false;
+      submit.textContent = '接続して開く';
+      renderSyncPill();
+      return;
+    }
+    setLocalOnly(false);
+    $('cn-key').value = '';
+    ui.view = 'dashboard';
+    renderSyncPill();
+    renderAll();
+    toast('接続しました。同期して最新を取り込みます');
+    syncNow();
   }
 
   function renderDashboard() {
@@ -1670,6 +1725,23 @@
      ==================================================================== */
 
   const LAST_SYNC_KEY = 'lyriclab_last_sync';
+  // 「接続せずにこの端末だけで使う」を選んだかどうか。接続キーと同じくタブ単位で持つ。
+  const LOCAL_ONLY_KEY = 'lyriclab_local_only';
+
+  function localOnly() {
+    try { return sessionStorage.getItem(LOCAL_ONLY_KEY) === '1'; } catch (e) { return false; }
+  }
+  function setLocalOnly(on) {
+    try {
+      if (on) sessionStorage.setItem(LOCAL_ONLY_KEY, '1');
+      else sessionStorage.removeItem(LOCAL_ONLY_KEY);
+    } catch (e) {}
+  }
+
+  /** 接続をまだ通っていない＝入口の接続画面を出すべき状態か。 */
+  function needsConnect() {
+    return !syncReady() && !localOnly();
+  }
   const syncState = { busy: false, error: null, at: null };
 
   /** Apps Script へのPOST。プリフライトを避けるためform-encodedで送る。 */
@@ -1804,6 +1876,14 @@
 
     $('sync-btn').addEventListener('click', syncNow);
     $('sync-pill').addEventListener('click', openAiModal);
+
+    $('connect-form').addEventListener('submit', (e) => { e.preventDefault(); submitConnect(); });
+    $('connect-skip').addEventListener('click', () => {
+      setLocalOnly(true);
+      ui.view = 'dashboard';
+      renderAll();
+      toast('この端末だけで使います。共作者とは共有されません');
+    });
 
     $('nav-dashboard').addEventListener('click', () => { ui.view = 'dashboard'; ui.composer = null; renderAll(); });
     $('logo-home').addEventListener('click', (e) => { e.preventDefault(); ui.view = 'dashboard'; ui.composer = null; renderAll(); });
@@ -2141,6 +2221,7 @@
     });
     $('ai-clear').addEventListener('click', () => {
       try { localStorage.removeItem(AI_CFG_KEY); sessionStorage.removeItem(AI_SECRET_KEY); } catch (err) {}
+      setLocalOnly(false);
       closeModal('ai-modal');
       renderSyncPill();
       renderAll();

@@ -43,6 +43,36 @@
 
     <main class="shell mx-auto max-w-6xl px-5 py-6 sm:px-8">
 
+      <!-- ============ CONNECT GATE ============ -->
+      <!-- SPLITAPPと同じく、まず接続してから使う。未接続のまま編集すると
+           シートの内容と食い違うため、入口で接続を促す。 -->
+      <section id="connect-view" class="hidden">
+        <div class="glass mx-auto max-w-xl rounded-2xl border border-line p-6 sm:p-8">
+          <p class="font-mono text-[10px] uppercase tracking-[.18em] text-acid">Connect</p>
+          <h1 class="mt-1 text-2xl font-extrabold tracking-[-.035em]">接続してはじめる</h1>
+          <p class="mt-2 text-xs leading-6 text-slate-500">
+            共作者と歌詞・提案・作業ログを共有するには、先にスプレッドシート（Apps Scriptウェブアプリ）へ接続します。
+            接続キーはタブを閉じると消えるため、開くたびに入力が必要です。
+          </p>
+
+          <form id="connect-form" class="mt-6 grid gap-3">
+            <label><span class="field-label">Apps Script Web App URL</span><input id="cn-url" type="url" class="field" placeholder="https://script.google.com/macros/s/.../exec" required></label>
+            <label><span class="field-label">接続キー（API_KEY）</span><input id="cn-key" type="password" autocomplete="off" class="field" placeholder="Script PropertiesのAPI_KEY" required></label>
+            <p id="connect-error" class="hidden text-xs leading-5 text-rose-400"></p>
+            <button id="connect-submit" type="submit" class="btn btn-primary btn-md mt-1">接続して開く</button>
+          </form>
+
+          <div class="mt-6 border-t border-line pt-5">
+            <p class="text-[11px] leading-5 text-slate-600">
+              接続先がまだ無い場合は <span class="font-mono">apps-script/Code.gs</span> をデプロイし、
+              Script Properties に <span class="font-mono">API_KEY</span> と <span class="font-mono">GEMINI_API_KEY</span> を設定してください。SPLITAPPと同じ手順です。
+            </p>
+            <button id="connect-skip" type="button" class="btn btn-ghost btn-sm mt-3">接続せずにこの端末だけで使う</button>
+            <p class="mt-1.5 text-[11px] leading-5 text-slate-600">この端末に保存された案件だけを開きます。共作者とは共有されません。</p>
+          </div>
+        </div>
+      </section>
+
       <!-- ============ DASHBOARD ============ -->
       <section id="dashboard-view">
         <div class="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -346,8 +376,9 @@
         <h3>セクションと呼び名</h3>
         <p>セクション種別（Aメロ・サビなど）は貢献の重み付けに使われます。「Aメロ / サビ」と「Verse / Chorus」の呼び名は、案件の<b>編集</b>から切り替えられます。</p>
 
-        <h3>保存と同期</h3>
-        <p>データはこの端末のブラウザに保存されます。共作者と共有するときは、ヘッダーの「同期」からApps Scriptウェブアプリに接続してください。</p>
+        <h3>接続と同期</h3>
+        <p>起動時にまず接続画面が出ます。Apps ScriptウェブアプリのURLと接続キーを入れて接続すると、共作者と歌詞・提案・作業ログを共有できます。接続キーはタブを閉じると消えるため、開くたびに入力が必要です。</p>
+        <p>接続後はヘッダーの「同期」でいつでも手動同期できます。ピルに 未接続 / 接続済み / 同期中 / 同期エラー / 最終同期時刻 が出ます。接続せずに<b>この端末だけで使う</b>ことも選べますが、その場合は共作者とは共有されません。</p>
       </div>
       <div class="mt-6 flex justify-end"><button type="button" data-close class="btn btn-primary btn-sm">閉じる</button></div>
     </div>

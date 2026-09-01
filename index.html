@@ -13,8 +13,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Noto+Sans+JP:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=1.7.0">
-  <link rel="stylesheet" href="lyrics.css?v=1.7.0">
+  <link rel="stylesheet" href="styles.css?v=1.8.0">
+  <link rel="stylesheet" href="lyrics.css?v=1.8.0">
 </head>
 <body class="min-h-screen text-slate-100 antialiased selection:bg-acid selection:text-ink">
 
@@ -26,7 +26,14 @@
   </div>
 
   <div id="auth-restoring" class="auth-screen">
-    <p class="auth-checking-note">接続設定を復元しています…</p>
+    <div class="boot-box">
+      <span class="auth-mark">LL</span>
+      <div class="boot-head">
+        <span id="boot-label" class="boot-label">接続設定を復元しています</span>
+        <span id="boot-pct" class="boot-pct">0%</span>
+      </div>
+      <div class="boot-track"><div id="boot-bar" class="boot-bar"></div></div>
+    </div>
   </div>
 
   <div id="auth-gate" class="auth-screen">
@@ -462,7 +469,7 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script src="app.js?v=1.7.0"></script>
-  <script type="module" src="auth.js?v=1.7.0"></script>
+  <script src="app.js?v=1.8.0"></script>
+  <script type="module" src="auth.js?v=1.8.0"></script>
 </body>
 </html>

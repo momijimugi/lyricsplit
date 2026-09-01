@@ -81,6 +81,15 @@
 
   const PATCH_NOTES = [
     {
+      version: '1.8.0',
+      date: '2026-08-31',
+      title: '起動を速く・待ち時間を見えるように',
+      items: [
+        '起動時の接続確認と最初の同期で、同じ全件取得を2回していたのを1回にしました',
+        '接続設定を復元しているあいだ、いま何を待っているかと進み具合を出すようにしました'
+      ]
+    },
+    {
       version: '1.7.0',
       date: '2026-08-31',
       title: '名前の扱いを整理',
@@ -2197,6 +2206,12 @@
      認証を使わない場合は cloud() が null になり、これまで通り
      localStorage / sessionStorage だけの単一接続として動く。 */
 
+  /** 起動時の進捗表示。auth.js 側の画面へ渡すだけで、無ければ何もしない。 */
+  const bootProgress = (pct, label) => {
+    const fn = window.LYRICLAB_AUTH && window.LYRICLAB_AUTH.progress;
+    if (typeof fn === 'function') fn(pct, label);
+  };
+
   const cloud = () => {
     const s = window.LYRICLAB_AUTH && window.LYRICLAB_AUTH.settings;
     return s && s.available ? s : null;
@@ -2229,9 +2244,13 @@
     });
   }
 
-  /** 打ち間違いを保存しないよう、実際に通信して確かめる。 */
+  /**
+   * 打ち間違いを保存しないよう、実際に通信して確かめる。
+   * 取得した中身はそのまま同期に使い回す。確認と同期で同じ全件取得を
+   * 2回走らせると、そのぶん待ち時間が倍になるため。
+   */
   async function testConnection() {
-    await gasPost('pull', null, 20000);
+    return gasPost('pull', null, 20000);
   }
 
   /** 接続に失敗したら、鍵を持ち越さない。 */
@@ -2363,8 +2382,10 @@
         return { ok: false, reason: 'none' };
       }
       applyWorkspace(ws);
+      bootProgress(55, '「' + (ws.label || '接続先') + '」に接続しています');
+      let pulled = null;
       try {
-        await testConnection();
+        pulled = await testConnection();
       } catch (e) {
         dropConnection();
         restoreNotice = { kind: 'gas', text: connectionFailedText(e) };
@@ -2372,14 +2393,15 @@
         renderAll();
         return { ok: false, reason: 'gas' };
       }
+      bootProgress(90, '歌詞を取り込んでいます');
       claimUntaggedProjects(wsDoc.activeWorkspaceId);
       restoreNotice = null;
       setLocalOnly(false);
       ui.view = 'dashboard';
       renderSyncPill();
       renderAll();
-      toast('「' + (ws.label || '接続先') + '」に接続しました');
-      syncNow();
+      // 取得済みの中身をそのまま渡す。ここで取り直さない。
+      syncNow(pulled);
       return { ok: true };
     }
   };
@@ -2447,14 +2469,15 @@
    *  2. updatedAt が新しい方を採用してローカルへ反映
    *  3. ローカルが新しい／リモートに無いものを送信
    */
-  async function syncNow() {
+  async function syncNow(prefetched) {
     if (syncState.busy) return;
     if (!syncReady()) { openAiModal(); toast('先に接続設定を行ってください'); return; }
     syncState.busy = true;
     syncState.error = null;
     renderSyncPill();
     try {
-      const pulled = await gasPost('pull');
+      // 復元直後は接続確認で取得済みなので、そのぶんを省く。
+      const pulled = prefetched || await gasPost('pull');
       const all = Array.isArray(pulled.projects) ? pulled.projects : [];
       // 細工された／壊れた案件は取り込まない（IDや色がそのまま画面に入るため）。
       const remote = all.filter(isSafeProject);

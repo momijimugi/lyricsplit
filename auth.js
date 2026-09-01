@@ -15,7 +15,7 @@
    これまで通りログインなしで使える状態を保つ。
    ========================================================================== */
 
-import { firebaseConfig, isFirebaseConfigured } from './firebase-config.js?v=1.7.0';
+import { firebaseConfig, isFirebaseConfigured } from './firebase-config.js?v=1.8.0';
 
 // Firebase公式のブラウザ向けES Modules。ビルド環境は使わない。
 // 版を上げるときは3か所ともそろえること。
@@ -34,6 +34,23 @@ const $ = (id) => document.getElementById(id);
 const setAuthState = (state) => { document.documentElement.dataset.auth = state; };
 
 /**
+ * 起動時の進捗。何を待っているのか分かるように、割合と作業名を出す。
+ * 数字は実測ではなく段取りの目安で、後戻りはしない。
+ */
+let lastPct = 0;
+function progress(pct, label) {
+  const bar = $('boot-bar');
+  const text = $('boot-label');
+  const num = $('boot-pct');
+  if (!bar) return;
+  lastPct = Math.max(lastPct, Math.min(100, Math.round(pct)));
+  bar.style.width = lastPct + '%';
+  if (num) num.textContent = lastPct + '%';
+  if (text && label) text.textContent = label;
+}
+function resetProgress() { lastPct = 0; }
+
+/**
  * 他のスクリプトから uid / displayName / email を読めるようにしておく。
  * 今回はここまでで、既存の作業者IDや共同編集データへの紐付けはまだ行わない。
  */
@@ -49,6 +66,7 @@ window.LYRICLAB_AUTH = {
    * 未ログイン・Firestore未使用のときは available=false を返すだけで、
    * 呼び出し側は今まで通り localStorage / sessionStorage だけで動く。
    */
+  progress: progress,
   settings: {
     available: false,
     async load() { return { ok: false, reason: 'unavailable' }; },
@@ -150,8 +168,13 @@ async function boot() {
       attachSettings(app, user.uid);
       // 保存された接続設定があれば、本体を出す前に復元と接続確認を済ませる。
       // 接続画面が一瞬出てから消える、という見え方にしないため。
+      resetProgress();
       setAuthState('restoring');
-      restoreConnection().finally(() => setAuthState('in'));
+      progress(15, 'ログインを確認しました');
+      restoreConnection().finally(() => {
+        progress(100, '準備できました');
+        setAuthState('in');
+      });
     }, (err) => {
       console.error('[LYRICLAB] onAuthStateChanged', err);
       showError('ログイン状態を確認できませんでした。再読み込みしてください。');
@@ -316,6 +339,7 @@ async function restoreConnection() {
   // すでにこの端末で接続済みなら、そのまま使う（毎回Firestoreを読みに行かない）。
   if (app.isConnected && app.isConnected()) return;
 
+  progress(30, '接続先を読み込んでいます');
   const res = await window.LYRICLAB_AUTH.settings.load();
   if (!res.ok) {
     // Firestoreが読めない。Apps Scriptの失敗とは区別して伝える。

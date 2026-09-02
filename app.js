@@ -3244,4 +3244,738 @@
   } catch (e) {
     bootError(e);
   }
+
+/* ==========================================================================
+   LYRICLAB — 追加機能モジュール (IMPROVED v2.0)
+   このファイルを app.js の末尾（または適切な箇所）に統合してください。
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   【新機能1】韻（ライム）検出・ハイライト
+   -------------------------------------------------------------------------- */
+
+const RHYME_COLORS = ['rhyme-a', 'rhyme-b', 'rhyme-c', 'rhyme-d', 'rhyme-e'];
+
+/**
+ * テキストから末尾の母音パターンを抽出して韻を検出する。
+ * 日本語の場合は最後の2〜3文字の読みを、英語の場合は最後の母音を比較。
+ */
+function extractRhymePattern(text) {
+  if (!text) return '';
+  const t = text.trim();
+  // 日本語：ひらがな・カタカナの末尾3文字
+  const jpMatch = t.match(/[ぁ-んァ-ンー]{2,3}$/);
+  if (jpMatch) return jpMatch[0];
+  // 英語：末尾の母音パターン
+  const enMatch = t.toLowerCase().match(/[aeiou]+[^aeiou]*$/);
+  if (enMatch) return enMatch[0];
+  return t.slice(-2);
+}
+
+/**
+ * 歌詞全体の韻を分析し、各行に韻パターンを付与する。
+ */
+function analyzeRhymes(p) {
+  const patterns = {};
+  const lineRhymes = [];
+
+  p.sections.forEach((s) => {
+    s.lines.forEach((l) => {
+      const pattern = extractRhymePattern(l.text);
+      if (pattern.length >= 1) {
+        if (!patterns[pattern]) patterns[pattern] = [];
+        patterns[pattern].push({ sectionId: s.id, lineId: l.id, text: l.text });
+      }
+    });
+  });
+
+  // 2回以上出現するパターンだけを韻として扱う
+  const rhymeGroups = Object.entries(patterns)
+    .filter(([k, v]) => v.length >= 2)
+    .sort((a, b) => b[1].length - a[1].length)
+    .slice(0, 5); // 最大5グループ
+
+  const rhymeMap = {};
+  rhymeGroups.forEach(([pattern, lines], idx) => {
+    const colorClass = RHYME_COLORS[idx % RHYME_COLORS.length];
+    lines.forEach((line) => {
+      if (!rhymeMap[line.lineId]) rhymeMap[line.lineId] = [];
+      rhymeMap[line.lineId].push({ pattern, colorClass });
+    });
+  });
+
+  return rhymeMap;
+}
+
+/**
+ * 歌詞行のテキストに韻ハイライトを適用する。
+ */
+function applyRhymeHighlight(text, rhymes) {
+  if (!rhymes || !rhymes.length) return esc(text);
+  const pattern = rhymes[0].pattern;
+  const colorClass = rhymes[0].colorClass;
+  // 末尾のパターンをハイライト
+  const regex = new RegExp('(' + pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')$');
+  const highlighted = esc(text).replace(regex, '<span class="rhyme-highlight ' + colorClass + '">$1</span>');
+  return highlighted;
+}
+
+/**
+ * 韻の凡例を生成する。
+ */
+function renderRhymeLegend(rhymeMap) {
+  const patterns = {};
+  Object.values(rhymeMap).forEach((rhymes) => {
+    rhymes.forEach((r) => {
+      if (!patterns[r.pattern]) patterns[r.pattern] = r.colorClass;
+    });
+  });
+  const items = Object.entries(patterns);
+  if (items.length === 0) return '';
+  return '<div class="rhyme-legend">' + items.map(([p, c]) =>
+    '<span class="rhyme-legend-item"><span class="rhyme-legend-dot ' + c + '"></span>' + esc(p) + '</span>'
+  ).join('') + '</div>';
+}
+
+/* --------------------------------------------------------------------------
+   【新機能2】リアルタイム文字数カウンター
+   -------------------------------------------------------------------------- */
+
+const CHAR_COUNTER_KEY = 'lyriclab_char_targets';
+
+function loadCharTargets() {
+  try {
+    return JSON.parse(localStorage.getItem(CHAR_COUNTER_KEY) || '{}');
+  } catch (e) { return {}; }
+}
+
+function saveCharTargets(targets) {
+  try { localStorage.setItem(CHAR_COUNTER_KEY, JSON.stringify(targets)); } catch (e) {}
+}
+
+function getCharCount(p) {
+  return p.sections.reduce((a, s) => a + s.lines.reduce((b, l) => b + l.text.length, 0), 0);
+}
+
+function getSectionCharCount(s) {
+  return s.lines.reduce((a, l) => a + l.text.length, 0);
+}
+
+function renderCharCounter(p) {
+  const targets = loadCharTargets();
+  const total = getCharCount(p);
+  const target = targets[p.id] || 0;
+  const pct = target > 0 ? Math.min(100, (total / target) * 100) : 0;
+  const isNear = target > 0 && pct >= 80 && pct < 100;
+  const isOver = target > 0 && pct >= 100;
+
+  let cls = 'char-counter';
+  if (isOver) cls += ' is-over-limit';
+  else if (isNear) cls += ' is-near-limit';
+
+  return '<span class="' + cls + '" title="クリックで目標を設定">' +
+    '<span>' + total + (target ? '/' + target : '') + '字</span>' +
+    (target ? '<span class="char-counter-bar"><div style="width:' + pct + '%"></div></span>' : '') +
+  '</span>';
+}
+
+function renderSectionCharCounter(s, p) {
+  const targets = loadCharTargets();
+  const key = p.id + '_' + s.id;
+  const count = getSectionCharCount(s);
+  const target = targets[key] || 0;
+  const pct = target > 0 ? Math.min(100, (count / target) * 100) : 0;
+  const isNear = target > 0 && pct >= 80 && pct < 100;
+  const isOver = target > 0 && pct >= 100;
+
+  let cls = 'char-counter';
+  if (isOver) cls += ' is-over-limit';
+  else if (isNear) cls += ' is-near-limit';
+
+  return '<span class="' + cls + '" data-section-counter="' + s.id + '">' +
+    '<span>' + count + (target ? '/' + target : '') + '字</span>' +
+    (target ? '<span class="char-counter-bar"><div style="width:' + pct + '%"></div></span>' : '') +
+  '</span>';
+}
+
+/* --------------------------------------------------------------------------
+   【新機能3】作詞セッションタイマー
+   -------------------------------------------------------------------------- */
+
+const SESSION_KEY = 'lyriclab_session';
+let sessionTimer = null;
+let sessionSeconds = 0;
+let sessionStart = null;
+
+function loadSession() {
+  try {
+    const s = JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null');
+    if (s && s.projectId === ui.projectId) {
+      sessionSeconds = s.seconds || 0;
+      sessionStart = s.start ? new Date(s.start) : null;
+    } else {
+      sessionSeconds = 0;
+      sessionStart = null;
+    }
+  } catch (e) {
+    sessionSeconds = 0;
+    sessionStart = null;
+  }
+}
+
+function saveSession() {
+  try {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify({
+      projectId: ui.projectId,
+      seconds: sessionSeconds,
+      start: sessionStart ? sessionStart.toISOString() : null
+    }));
+  } catch (e) {}
+}
+
+function startSession() {
+  if (!sessionStart) sessionStart = new Date();
+  if (sessionTimer) return;
+  sessionTimer = setInterval(() => {
+    sessionSeconds++;
+    updateSessionDisplay();
+    if (sessionSeconds % 60 === 0) saveSession();
+  }, 1000);
+  updateSessionDisplay();
+}
+
+function pauseSession() {
+  if (sessionTimer) {
+    clearInterval(sessionTimer);
+    sessionTimer = null;
+    saveSession();
+  }
+  updateSessionDisplay();
+}
+
+function stopSession() {
+  pauseSession();
+  if (sessionSeconds > 60 && project()) {
+    log(project(), 'session.end', { note: formatSessionTime(sessionSeconds) });
+    save();
+  }
+  sessionSeconds = 0;
+  sessionStart = null;
+  saveSession();
+}
+
+function formatSessionTime(sec) {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  if (h > 0) return h + '時間' + m + '分';
+  return m + '分' + s + '秒';
+}
+
+function updateSessionDisplay() {
+  const el = document.getElementById('session-timer-display');
+  if (!el) return;
+  el.innerHTML = '⏱ ' + formatSessionTime(sessionSeconds);
+  el.classList.toggle('is-paused', !sessionTimer);
+}
+
+function renderSessionTimer() {
+  return '<span id="session-timer-display" class="session-timer is-paused">⏱ 0分0秒</span>';
+}
+
+/* --------------------------------------------------------------------------
+   【新機能4】通知センター
+   -------------------------------------------------------------------------- */
+
+let notifications = [];
+let notifRead = {};
+
+function loadNotifications() {
+  try {
+    notifRead = JSON.parse(localStorage.getItem('lyriclab_notif_read') || '{}');
+  } catch (e) { notifRead = {}; }
+}
+
+function saveNotifRead() {
+  try { localStorage.setItem('lyriclab_notif_read', JSON.stringify(notifRead)); } catch (e) {}
+}
+
+function generateNotifications(p) {
+  const notifs = [];
+  const now = new Date();
+
+  // 未処理の提案
+  p.suggestions.filter((s) => s.status === 'open').forEach((s) => {
+    notifs.push({
+      id: 'sug_' + s.id,
+      type: 'suggestion',
+      text: memberName(p, s.authorId) + 'が「' + (lineTextOf(p, s.lineId) || sectionNameOf(p, s.sectionId)).slice(0, 15) + '...」に提案を出しました',
+      time: s.createdAt,
+      priority: 2
+    });
+  });
+
+  // 未解決のコメント
+  p.comments.filter((c) => !c.resolved).forEach((c) => {
+    notifs.push({
+      id: 'com_' + c.id,
+      type: 'comment',
+      text: memberName(p, c.authorId) + 'がコメントを残しました：' + c.text.slice(0, 20) + (c.text.length > 20 ? '...' : ''),
+      time: c.createdAt,
+      priority: 1
+    });
+  });
+
+  // 締切が近い
+  if (p.deadline) {
+    const deadline = new Date(p.deadline);
+    const daysLeft = Math.ceil((deadline - now) / (1000 * 60 * 60 * 24));
+    if (daysLeft <= 3 && daysLeft >= 0) {
+      notifs.push({
+        id: 'deadline_' + p.id,
+        type: 'deadline',
+        text: '締切まであと' + daysLeft + '日です',
+        time: nowISO(),
+        priority: 3
+      });
+    }
+  }
+
+  return notifs.sort((a, b) => b.priority - a.priority);
+}
+
+function renderNotificationCenter(p) {
+  const notifs = generateNotifications(p);
+  const unread = notifs.filter((n) => !notifRead[n.id]).length;
+
+  return '<div id="notif-center" class="notification-center hidden">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem;">' +
+      '<span style="font-size:11px;font-weight:800;color:var(--text-strong);">通知</span>' +
+      '<button type="button" id="notif-close" style="font-size:10px;color:var(--text-faint);background:transparent;border:none;cursor:pointer;">✕</button>' +
+    '</div>' +
+    (notifs.length === 0 
+      ? '<p style="font-size:11px;color:var(--text-faint);text-align:center;padding:1rem;">通知はありません</p>'
+      : notifs.map((n) =>
+        '<div class="notification-item" data-notif-id="' + n.id + '">' +
+          '<span class="notification-dot ' + (notifRead[n.id] ? 'is-read' : '') + '"></span>' +
+          '<span class="notification-text">' + esc(n.text) + '</span>' +
+          '<span class="notification-time">' + fmtTime(n.time) + '</span>' +
+        '</div>'
+      ).join('')
+    ) +
+  '</div>' +
+  '<button type="button" id="notif-toggle" style="position:relative;background:transparent;border:none;cursor:pointer;padding:.3rem;color:var(--text-muted);">' +
+    '🔔' +
+    (unread > 0 ? '<span style="position:absolute;top:-2px;right:-2px;width:.5rem;height:.5rem;border-radius:999px;background:var(--warn);box-shadow:0 0 0 2px var(--surface);"></span>' : '') +
+  '</button>';
+}
+
+/* --------------------------------------------------------------------------
+   【新機能5】ドラフト比較ビュー
+   -------------------------------------------------------------------------- */
+
+const DRAFT_HISTORY_KEY = 'lyriclab_drafts';
+
+function saveDraftSnapshot(p) {
+  try {
+    const drafts = JSON.parse(localStorage.getItem(DRAFT_HISTORY_KEY) || '{}');
+    if (!drafts[p.id]) drafts[p.id] = [];
+    const snapshot = {
+      at: nowISO(),
+      sections: p.sections.map((s) => ({ name: s.name, lines: s.lines.map((l) => l.text) }))
+    };
+    // 同じ日のスナップショットは上書き
+    const today = snapshot.at.slice(0, 10);
+    const existing = drafts[p.id].findIndex((d) => d.at.slice(0, 10) === today);
+    if (existing >= 0) drafts[p.id][existing] = snapshot;
+    else {
+      drafts[p.id].push(snapshot);
+      if (drafts[p.id].length > 10) drafts[p.id].shift(); // 最大10件
+    }
+    localStorage.setItem(DRAFT_HISTORY_KEY, JSON.stringify(drafts));
+  } catch (e) {}
+}
+
+function loadDraftHistory(p) {
+  try {
+    const drafts = JSON.parse(localStorage.getItem(DRAFT_HISTORY_KEY) || '{}');
+    return drafts[p.id] || [];
+  } catch (e) { return []; }
+}
+
+function renderDraftComparison(p, draftIndex) {
+  const drafts = loadDraftHistory(p);
+  if (!drafts[draftIndex]) return '<div class="empty-note">比較するドラフトがありません</div>';
+
+  const draft = drafts[draftIndex];
+  return '<div class="diff-view">' +
+    '<div class="diff-view-col is-old">' +
+      '<div class="diff-view-header">' + fmtTime(draft.at) + ' のバージョン</div>' +
+      draft.sections.map((s) =>
+        '<div style="margin-bottom:.75rem;">' +
+          '<p style="font-size:9px;color:var(--text-faint);margin-bottom:.25rem;">' + esc(s.name) + '</p>' +
+          s.lines.map((l) => '<p class="diff-line">' + esc(l) + '</p>').join('') +
+        '</div>'
+      ).join('') +
+    '</div>' +
+    '<div class="diff-view-col is-new">' +
+      '<div class="diff-view-header">現在のバージョン</div>' +
+      p.sections.map((s) =>
+        '<div style="margin-bottom:.75rem;">' +
+          '<p style="font-size:9px;color:var(--text-faint);margin-bottom:.25rem;">' + esc(sectionName(p, s)) + '</p>' +
+          s.lines.map((l) => {
+            const oldSec = draft.sections.find((os) => os.name === s.name || os.name === sectionName(p, s));
+            const oldLine = oldSec ? oldSec.lines[s.lines.indexOf(l)] : null;
+            let cls = 'diff-line';
+            if (!oldLine) cls += ' is-added';
+            else if (oldLine !== l.text) cls += ' is-changed';
+            return '<p class="' + cls + '">' + esc(l.text) + '</p>';
+          }).join('') +
+        '</div>'
+      ).join('') +
+    '</div>' +
+  '</div>';
+}
+
+/* --------------------------------------------------------------------------
+   【新機能6】タグ・キーワード管理
+   -------------------------------------------------------------------------- */
+
+const TAGS_KEY = 'lyriclab_tags';
+
+function loadTags(p) {
+  try {
+    const all = JSON.parse(localStorage.getItem(TAGS_KEY) || '{}');
+    return all[p.id] || [];
+  } catch (e) { return []; }
+}
+
+function saveTags(p, tags) {
+  try {
+    const all = JSON.parse(localStorage.getItem(TAGS_KEY) || '{}');
+    all[p.id] = tags;
+    localStorage.setItem(TAGS_KEY, JSON.stringify(all));
+  } catch (e) {}
+}
+
+function renderTags(p) {
+  const tags = loadTags(p);
+  return '<div class="tag-list" id="tag-list">' +
+    tags.map((t) =>
+      '<span class="tag-item">' + esc(t) + 
+        '<button type="button" class="tag-remove" data-tag-remove="' + esc(t) + '">×</button>' +
+      '</span>'
+    ).join('') +
+    '<input type="text" class="tag-input" id="tag-input" placeholder="＋ タグ追加" maxlength="20">' +
+  '</div>';
+}
+
+/* --------------------------------------------------------------------------
+   【新機能7】メロディラインインジケータ
+   -------------------------------------------------------------------------- */
+
+function renderMelodyIndicator(sectionIndex) {
+  // セクションの種別に応じてメロディの高低を推定
+  const patterns = {
+    intro: [3, 4, 5, 4, 3],
+    verse: [4, 4, 5, 5, 4, 4, 5, 6],
+    prechorus: [5, 5, 6, 6, 7, 7, 8],
+    chorus: [6, 7, 8, 8, 7, 6, 7, 8],
+    finalchorus: [7, 8, 9, 9, 8, 7, 8, 9],
+    bridge: [5, 4, 5, 6, 5, 4, 3],
+    outro: [4, 3, 2, 1]
+  };
+  const defaultPattern = [4, 5, 5, 4, 5, 6, 5, 4];
+  const pat = patterns[sectionIndex % Object.keys(patterns).length] || defaultPattern;
+
+  return '<div class="melody-indicator" title="メロディの高低（推定）">' +
+    pat.map((h) => {
+      const height = (h / 10) * 100;
+      const cls = h >= 7 ? 'is-high' : h <= 3 ? 'is-low' : '';
+      return '<div class="melody-bar ' + cls + '" style="height:' + height + '%"></div>';
+    }).join('') +
+  '</div>';
+}
+
+/* --------------------------------------------------------------------------
+   【新機能8】韻律パターン表示（音数・強勢）
+   -------------------------------------------------------------------------- */
+
+function countSyllables(text) {
+  if (!text) return 0;
+  // 日本語：文字数を近似
+  const jp = text.match(/[ぁ-んァ-ン一-龯]/g);
+  if (jp) return jp.length;
+  // 英語：母音の塊を数える
+  const en = text.toLowerCase().match(/[aeiouy]+/g);
+  return en ? en.length : text.split(/\s+/).length;
+}
+
+function estimateStressPattern(text) {
+  const count = countSyllables(text);
+  if (count === 0) return [];
+  // 簡易的な強勢パターン：交互に強勢を付ける
+  return Array.from({ length: count }, (_, i) => i % 2 === 0);
+}
+
+function renderSyllablePattern(text) {
+  const count = countSyllables(text);
+  const stress = estimateStressPattern(text);
+  if (count === 0) return '';
+
+  return '<span class="syllable-pattern">' +
+    stress.map((s) => '<span class="syllable-dot ' + (s ? 'is-stressed' : '') + '"></span>').join('') +
+    '<span class="syllable-count">' + count + '</span>' +
+  '</span>';
+}
+
+/* --------------------------------------------------------------------------
+   【新機能9】フローティングアクションボタン（モバイル向け）
+   -------------------------------------------------------------------------- */
+
+function renderFAB() {
+  if (window.innerWidth > 640) return '';
+  return '<button type="button" id="lyric-fab" class="fab" title="クイックアクション">＋</button>';
+}
+
+/* --------------------------------------------------------------------------
+   【統合】既存関数の拡張
+   -------------------------------------------------------------------------- */
+
+// renderSections を拡張して韻・文字数・韻律パターンを表示
+const originalRenderSections = renderSections;
+renderSections = function(p) {
+  const rhymeMap = analyzeRhymes(p);
+  const host = $('section-list');
+  if (!p.sections.length) {
+    host.innerHTML = '<div class="empty-note">セクションがありません。「＋ セクション追加」か「歌詞を一括入力」から始めてください。</div>';
+    return;
+  }
+
+  host.innerHTML = p.sections.map((s, si) => {
+    const kindOpts = Object.keys(SECTION_KINDS).map((k) =>
+      '<option value="' + k + '"' + (s.kind === k ? ' selected' : '') + '>' + kindLabel(k) + '</option>').join('');
+    const lines = s.lines.map((l, i) => {
+      const owners = Object.keys(l.credits || {}).sort((a, b) => l.credits[b] - l.credits[a]);
+      const top = owners[0];
+      const openSug = p.suggestions.filter((x) => x.lineId === l.id && x.status === 'open').length;
+      const openCom = p.comments.filter((x) => x.lineId === l.id && !x.resolved).length;
+      const isOpen = ui.composer && ui.composer.lineId === l.id;
+      const rhymes = rhymeMap[l.id] || [];
+      const marks =
+        (openSug ? '<span class="line-badge is-suggest">提案' + openSug + '</span>' : '') +
+        (openCom ? '<span class="line-badge is-comment">コメント' + openCom + '</span>' : '') +
+        (owners.length > 1 ? '<span class="line-badge is-co">共作</span>' : '') +
+        renderSyllablePattern(l.text);
+
+      const displayText = rhymes.length 
+        ? applyRhymeHighlight(l.text, rhymes)
+        : (esc(l.text) || '（空行）');
+
+      return '<div class="lyric-line' + (isOpen ? ' is-open' : '') + '" data-line="' + l.id + '" data-section="' + s.id + '"' +
+          (top ? ' data-owner="1" style="--owner-color:' + memberColor(p, top) + '"' : '') + '>' +
+        '<span class="lyric-line-no">' + (i + 1) + '</span>' +
+        '<span class="lyric-line-text' + (l.text ? '' : ' is-empty') + '">' + displayText + '</span>' +
+        '<span class="lyric-line-marks">' + marks + '</span>' +
+        (isOpen ? renderComposer(p, s, l) : '') +
+      '</div>';
+    }).join('');
+
+    const composerAtEnd = (ui.composer && ui.composer.sectionId === s.id && !ui.composer.lineId)
+      ? '<div class="px-3 pb-3">' + renderComposer(p, s, null) + '</div>' : '';
+
+    return '<div class="lyric-section" data-section="' + s.id + '">' +
+      '<div class="lyric-section-head">' +
+        '<input class="lyric-section-name" data-rename="' + s.id + '" value="' + esc(sectionName(p, s)) + '"' +
+          (s.autoName ? ' title="呼び名の切り替えに追従します（手で書き換えると固定されます）"' : '') + '>' +
+        '<select class="rounded border border-line bg-black/20 px-1.5 py-1 text-[10px]" data-kind="' + s.id + '">' + kindOpts + '</select>' +
+        '<span class="section-weight">×' + sectionWeight(s).toFixed(2) + '</span>' +
+        renderSectionCharCounter(s, p) +
+        renderMelodyIndicator(si) +
+        '<button type="button" class="icon-mini" data-del-section="' + s.id + '" title="セクションを削除">✕</button>' +
+      '</div>' +
+      (lines || '<p class="px-4 py-3 text-xs text-slate-500">行がありません。</p>') +
+      composerAtEnd +
+      '<div class="border-t border-line/70 px-3 py-2">' +
+        '<button type="button" class="btn btn-ghost btn-sm" data-addline="' + s.id + '">' +
+          (ui.mode === 'suggest' ? '＋ 行の追加を提案' : ui.mode === 'comment' ? '＋ このセクションにコメント' : '＋ 行を追加') +
+        '</button>' +
+      '</div>' +
+    '</div>';
+  }).join('') + renderRhymeLegend(rhymeMap);
+};
+
+// renderProject を拡張してセッションタイマー・通知を表示
+const originalRenderProject = renderProject;
+renderProject = function() {
+  originalRenderProject();
+  const p = project();
+  if (!p) return;
+
+  // セッションタイマー表示
+  const timerEl = document.getElementById('session-timer-slot');
+  if (timerEl) timerEl.innerHTML = renderSessionTimer();
+
+  // 通知センター表示
+  const notifEl = document.getElementById('notification-slot');
+  if (notifEl) notifEl.innerHTML = renderNotificationCenter(p);
+
+  // タグ表示
+  const tagEl = document.getElementById('tag-slot');
+  if (tagEl) tagEl.innerHTML = renderTags(p);
+
+  // FAB表示
+  const fabEl = document.getElementById('fab-slot');
+  if (fabEl) fabEl.innerHTML = renderFAB();
+};
+
+// newProject を拡張してドラフトスナップショットを保存
+const originalNewProject = newProject;
+newProject = function() {
+  originalNewProject();
+  loadSession();
+  startSession();
+};
+
+// プロジェクト切り替え時にセッションを管理
+const originalRenderAll = renderAll;
+renderAll = function() {
+  if (ui.view === 'project' && ui.projectId) {
+    loadSession();
+    startSession();
+    saveDraftSnapshot(project());
+  } else {
+    pauseSession();
+  }
+  originalRenderAll();
+};
+
+/* --------------------------------------------------------------------------
+   【イベントハンドラ】新機能のイベント配線
+   -------------------------------------------------------------------------- */
+
+document.addEventListener('click', (e) => {
+  // 通知センタートグル
+  const notifToggle = e.target.closest('#notif-toggle');
+  if (notifToggle) {
+    const center = document.getElementById('notif-center');
+    if (center) center.classList.toggle('hidden');
+    return;
+  }
+  const notifClose = e.target.closest('#notif-close');
+  if (notifClose) {
+    const center = document.getElementById('notif-center');
+    if (center) center.classList.add('hidden');
+    return;
+  }
+
+  // 通知アイテムクリックで既読に
+  const notifItem = e.target.closest('.notification-item');
+  if (notifItem) {
+    const id = notifItem.dataset.notifId;
+    if (id) {
+      notifRead[id] = true;
+      saveNotifRead();
+      notifItem.querySelector('.notification-dot').classList.add('is-read');
+    }
+    return;
+  }
+
+  // タグ追加
+  const tagInput = e.target.closest('#tag-input');
+  if (tagInput && e.key === 'Enter') {
+    const p = project();
+    const val = tagInput.value.trim();
+    if (val && p) {
+      const tags = loadTags(p);
+      if (!tags.includes(val)) {
+        tags.push(val);
+        saveTags(p, tags);
+        renderProject();
+      }
+    }
+    return;
+  }
+
+  // タグ削除
+  const tagRemove = e.target.closest('[data-tag-remove]');
+  if (tagRemove) {
+    const p = project();
+    const tag = tagRemove.dataset.tagRemove;
+    if (p && tag) {
+      const tags = loadTags(p).filter((t) => t !== tag);
+      saveTags(p, tags);
+      renderProject();
+    }
+    return;
+  }
+
+  // 文字数カウンタークリックで目標設定
+  const charCounter = e.target.closest('[data-section-counter]');
+  if (charCounter) {
+    const p = project();
+    const sid = charCounter.dataset.sectionCounter;
+    const targets = loadCharTargets();
+    const key = p.id + '_' + sid;
+    const current = targets[key] || 0;
+    const val = prompt('このセクションの目標文字数を設定:', current || '');
+    if (val !== null) {
+      targets[key] = parseInt(val, 10) || 0;
+      saveCharTargets(targets);
+      renderProject();
+    }
+    return;
+  }
+
+  // FABクリック
+  const fab = e.target.closest('#lyric-fab');
+  if (fab) {
+    // クイックメニューを表示（簡易実装）
+    const actions = ['＋ セクション追加', '💾 ドラフト保存', '📋 コピー'];
+    const choice = prompt('クイックアクション:\n1. セクション追加\n2. ドラフト保存\n3. 歌詞をコピー');
+    if (choice === '1') {
+      const p = project();
+      addSection(p, null, 'verse');
+      save(); renderProject();
+    } else if (choice === '2') {
+      saveDraftSnapshot(project());
+      toast('ドラフトを保存しました');
+    } else if (choice === '3') {
+      navigator.clipboard.writeText(exportText('lyrics'))
+        .then(() => toast('歌詞をコピーしました'));
+    }
+    return;
+  }
+});
+
+// タグ入力のEnterキー
+document.addEventListener('keydown', (e) => {
+  if (e.target.id === 'tag-input' && e.key === 'Enter') {
+    e.preventDefault();
+    const p = project();
+    const val = e.target.value.trim();
+    if (val && p) {
+      const tags = loadTags(p);
+      if (!tags.includes(val)) {
+        tags.push(val);
+        saveTags(p, tags);
+        renderProject();
+      }
+    }
+  }
+});
+
+// 通知センター外クリックで閉じる
+document.addEventListener('click', (e) => {
+  const center = document.getElementById('notif-center');
+  const toggle = document.getElementById('notif-toggle');
+  if (center && !center.classList.contains('hidden') && 
+      !center.contains(e.target) && (!toggle || !toggle.contains(e.target))) {
+    center.classList.add('hidden');
+  }
+});
+
+// 初期化時に通知読み込み
+loadNotifications();
+
 })();

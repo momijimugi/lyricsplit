@@ -1,11 +1,27 @@
 /* ==========================================================================
-   LYRICLAB — component layer
-   styles.css (SPLITLAB のデザインシステム) をそのまま流用し、
-   歌詞エディタ固有のコンポーネントだけをここに追加する。
-   色は styles.css の CSS 変数のみを参照すること。
+   LYRICLAB — component layer (IMPROVED v2.0)
+   デザイン強化・新機能対応版
    ========================================================================== */
 
-/* --- form fields ---------------------------------------------------------- */
+/* --- ベース変数上書き（より洗練されたパレット）----------------------------- */
+:root {
+  --glass-bg: rgba(255, 255, 255, 0.65);
+  --glass-border: rgba(255, 255, 255, 0.35);
+  --gradient-start: rgba(var(--accent-text-rgb), 0.08);
+  --gradient-end: transparent;
+  --shadow-elevated: 0 8px 32px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+  --transition-smooth: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  --radius-xl: 1.25rem;
+}
+
+:root[data-theme="dark"] {
+  --glass-bg: rgba(27, 31, 38, 0.75);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --gradient-start: rgba(var(--accent-text-rgb), 0.12);
+  --shadow-elevated: 0 8px 32px rgba(0, 0, 0, 0.35), 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* --- フォーム強化 ---------------------------------------------------------- */
 .field {
   width: 100%;
   border-radius: var(--radius-sm);
@@ -16,9 +32,12 @@
   font-size: .875rem;
   line-height: 1.5;
   outline: none;
-  transition: border-color .15s ease;
+  transition: var(--transition-smooth);
 }
-.field:focus { border-color: rgba(var(--accent-text-rgb), .55); }
+.field:focus { 
+  border-color: rgba(var(--accent-text-rgb), .55); 
+  box-shadow: 0 0 0 4px rgba(var(--accent-text-rgb), .1), 0 2px 8px rgba(var(--accent-text-rgb), .08);
+}
 textarea.field { resize: vertical; }
 .field-label {
   display: block;
@@ -30,7 +49,7 @@ textarea.field { resize: vertical; }
   color: var(--text-faint);
 }
 
-/* --- modal ---------------------------------------------------------------- */
+/* --- モーダル強化（アニメーション付き）------------------------------------- */
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -42,36 +61,55 @@ textarea.field { resize: vertical; }
   padding: 1.25rem;
   padding-block: 2.5rem;
   background: var(--overlay);
-  -webkit-backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  opacity: 0;
+  animation: modalBackdropIn 0.25s ease forwards;
 }
-.modal-backdrop.hidden { display: none; }
+.modal-backdrop.hidden { 
+  display: none; 
+  animation: none;
+}
+.modal-backdrop:not(.hidden) .modal-box {
+  animation: modalBoxIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes modalBackdropIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes modalBoxIn {
+  from { opacity: 0; transform: scale(0.92) translateY(20px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
 
-/* --- mode / tab switch ---------------------------------------------------- */
+/* --- モード / タブスイッチ強化 -------------------------------------------- */
 .mode-switch {
   display: inline-flex;
   flex-wrap: wrap;
-  gap: 2px;
-  padding: 3px;
+  gap: 3px;
+  padding: 4px;
   border-radius: 999px;
   border: 1px solid var(--line-strong);
   background: var(--surface-muted);
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
 }
 .mode-btn {
   border: 0;
   background: transparent;
   border-radius: 999px;
-  padding: .4rem .8rem;
+  padding: .4rem .85rem;
   font-size: 11px;
   font-weight: 700;
   color: var(--text-muted);
-  transition: background-color .15s ease, color .15s ease;
+  transition: var(--transition-smooth);
+  position: relative;
+  overflow: hidden;
 }
 .mode-btn:hover { color: var(--text-strong); }
 .mode-btn.is-active {
   background: var(--surface);
   color: var(--text-strong);
-  box-shadow: var(--shadow-xs);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08), 0 0 0 1px rgba(var(--accent-text-rgb), 0.15);
 }
 .tab-count {
   display: inline-block;
@@ -84,15 +122,19 @@ textarea.field { resize: vertical; }
   font-size: 9px;
 }
 
-/* --- lyric sections ------------------------------------------------------- */
+/* --- 歌詞セクション強化（グラデーション付き）------------------------------- */
 .lyric-section {
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-md);
-  background: var(--surface-muted);
+  background: linear-gradient(180deg, var(--gradient-start) 0%, var(--surface-muted) 8%);
+  box-shadow: var(--shadow-xs);
+  transition: var(--transition-smooth);
+}
+.lyric-section:hover {
+  box-shadow: var(--shadow-elevated);
+  border-color: var(--hover-border);
 }
 .lyric-section > :last-child { border-radius: 0 0 var(--radius-md) var(--radius-md); }
-/* セクション見出しは歌詞の上端に貼り付く（長い歌詞でも現在地が分かる）。
-   sticky を効かせるため .lyric-section には overflow を掛けないこと。 */
 .lyric-section-head {
   position: sticky;
   top: calc(var(--bar-h, 2.4rem) + .5rem);
@@ -104,8 +146,8 @@ textarea.field { resize: vertical; }
   border-bottom: 1px solid var(--line-soft);
   border-radius: var(--radius-md) var(--radius-md) 0 0;
   background: color-mix(in srgb, var(--surface) 94%, transparent);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
 }
 .lyric-section-name {
   flex: 1;
@@ -118,6 +160,7 @@ textarea.field { resize: vertical; }
   outline: none;
   padding: .15rem .25rem;
   border-radius: 4px;
+  transition: background 0.15s ease;
 }
 .lyric-section-name:focus { background: var(--surface-muted); }
 .section-weight {
@@ -134,23 +177,35 @@ textarea.field { resize: vertical; }
   padding: .15rem .4rem;
   font-size: 11px;
   color: var(--text-faint);
+  transition: var(--transition-smooth);
 }
-.icon-mini:hover { color: var(--danger); border-color: var(--line-strong); }
+.icon-mini:hover { color: var(--danger); border-color: var(--line-strong); background: var(--surface-hover); }
 
-/* --- lyric lines ---------------------------------------------------------- */
+/* --- 歌詞行強化 ------------------------------------------------------------ */
 .lyric-line {
   display: grid;
   grid-template-columns: 2.1rem minmax(0, 1fr) minmax(4.75rem, auto);
   align-items: start;
   gap: .5rem;
-  padding: .35rem .75rem;
+  padding: .4rem .75rem;
   border-left: 3px solid transparent;
   cursor: pointer;
-  transition: background-color .12s ease;
+  transition: var(--transition-smooth);
+  position: relative;
 }
+.lyric-line::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(var(--accent-text-rgb), 0.02) 50%, transparent 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+.lyric-line:hover::before { opacity: 1; }
 .lyric-line + .lyric-line { border-top: 1px solid var(--line-soft); }
-.lyric-line:hover { background: var(--surface-hover); }
-.lyric-line.is-open { background: var(--surface-hover); cursor: default; }
+.lyric-line:hover { background: var(--surface-hover); transform: translateX(2px); }
+.lyric-line.is-open { background: var(--surface-hover); cursor: default; transform: translateX(0); }
 .lyric-line-no {
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 10px;
@@ -175,14 +230,15 @@ textarea.field { resize: vertical; }
   border: 1px solid var(--line-strong);
   color: var(--text-faint);
   white-space: nowrap;
+  transition: var(--transition-smooth);
 }
-.line-badge.is-suggest { border-color: var(--warn); color: var(--warn); }
-.line-badge.is-comment { border-color: rgba(var(--accent-b-rgb), .5); color: var(--accent-b-text); }
+.line-badge.is-suggest { border-color: var(--warn); color: var(--warn); background: rgba(251, 191, 36, 0.08); }
+.line-badge.is-comment { border-color: rgba(var(--accent-b-rgb), .5); color: var(--accent-b-text); background: rgba(var(--accent-b-rgb), 0.08); }
 
-/* authorship stripe on the left of a line */
+/* 著者色分け */
 .lyric-line[data-owner] { border-left-color: var(--owner-color, transparent); }
 
-/* --- inline composer ------------------------------------------------------ */
+/* --- インラインコンポーザー強化 ------------------------------------------- */
 .composer {
   grid-column: 1 / -1;
   margin-top: .4rem;
@@ -190,6 +246,12 @@ textarea.field { resize: vertical; }
   border-radius: var(--radius-sm);
   background: var(--surface);
   padding: .6rem;
+  box-shadow: var(--shadow-elevated);
+  animation: composerIn 0.25s ease;
+}
+@keyframes composerIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .composer-label {
   font-family: "JetBrains Mono", ui-monospace, monospace;
@@ -211,19 +273,24 @@ textarea.field { resize: vertical; }
   line-height: 1.6;
   outline: none;
   resize: vertical;
+  transition: border-color 0.15s ease;
 }
 .composer textarea:focus { border-color: rgba(var(--accent-text-rgb), .55); }
 .composer-actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .5rem; }
 
-/* --- side panel ----------------------------------------------------------- */
-/* ワンページ構成なので、パネルの中身もページと一緒に流す（内部スクロールなし）。
-   件数が増えがちなログだけは既定で最新分に絞り、ボタンで全件に切り替える。 */
+/* --- サイドパネル強化 ------------------------------------------------------ */
 .panel-body { padding-right: .15rem; }
 .card {
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-sm);
   background: var(--surface-muted);
   padding: .7rem .8rem;
+  transition: var(--transition-smooth);
+}
+.card:hover {
+  border-color: var(--hover-border);
+  box-shadow: var(--shadow-xs);
+  transform: translateY(-1px);
 }
 .card + .card { margin-top: .5rem; }
 .card-head {
@@ -242,10 +309,10 @@ textarea.field { resize: vertical; }
 }
 .thread-item { margin-top: .5rem; border-left: 2px solid var(--line-strong); padding-left: .6rem; }
 
-/* 提案に重ねられた対案。左に段差をつけて、推敲の流れを縦に読ませる。 */
+/* 対案入れ子 */
 .sug-children { margin-left: .7rem; padding-left: .7rem; border-left: 2px solid var(--line-strong); }
 .sug-children > .card { margin-top: .5rem; }
-.card.is-counter { background: var(--surface); }
+.card.is-counter { background: var(--surface); border-left: 2px dashed rgba(var(--accent-b-rgb), 0.4); }
 
 .diff-old { color: var(--danger); text-decoration: line-through; }
 .diff-new { color: var(--success); }
@@ -268,18 +335,31 @@ textarea.field { resize: vertical; }
   font-weight: 800;
   color: #0c1116;
   flex-shrink: 0;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.1);
 }
 
-/* --- analysis ------------------------------------------------------------- */
-.metric { border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--surface-muted); padding: .8rem; }
+/* --- 分析強化 -------------------------------------------------------------- */
+.metric { 
+  border: 1px solid var(--line-soft); 
+  border-radius: var(--radius-sm); 
+  background: var(--surface-muted); 
+  padding: .8rem;
+  transition: var(--transition-smooth);
+}
+.metric:hover {
+  border-color: var(--hover-border);
+  box-shadow: var(--shadow-xs);
+}
 .metric + .metric { margin-top: .6rem; }
 .metric-bar { display: flex; height: .45rem; width: 100%; overflow: hidden; border-radius: 999px; background: var(--track-strong); margin-top: .5rem; }
+.metric-bar > div { transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
 .metric-note { margin-top: .5rem; font-size: 10px; line-height: 1.5; color: var(--text-faint); }
 
-/* --- project top bar -------------------------------------------------------
-   タイトル・操作・スプリット比率を1枚の細いバーにまとめ、
-   その下の歌詞エディタへ縦を明け渡す（SPLITAPPのヘッダーと同じ考え方）。 */
-.project-top { padding: .55rem .75rem; }
+/* --- プロジェクトトップバー強化 ------------------------------------------- */
+.project-top { 
+  padding: .55rem .75rem;
+  background: linear-gradient(135deg, var(--surface) 0%, var(--surface-muted) 100%);
+}
 .project-top-main {
   display: flex;
   align-items: center;
@@ -289,8 +369,6 @@ textarea.field { resize: vertical; }
 .project-top-actions {
   display: flex;
   flex-wrap: wrap;
-  /* アイコンボタンと btn-sm は既定のパディングが違うので、
-     中央揃えだと高さが揃わない。同じ行では引き伸ばして合わせる。 */
   align-items: stretch;
   justify-content: flex-end;
   gap: .35rem;
@@ -314,29 +392,24 @@ textarea.field { resize: vertical; }
 }
 .split-bar {
   display: flex;
-  height: .35rem;
+  height: .4rem;
   width: 100%;
-  /* 画面いっぱいに伸ばすと比率が読み取りにくいので上限を置く。 */
   max-width: 24rem;
   overflow: hidden;
   border-radius: 999px;
   background: var(--track-strong);
   margin-top: .35rem;
 }
+.split-bar > div { transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
 
 @media (min-width: 900px) {
-  /* 広い画面では1段に収め、比率バーは右半分に置く。 */
   .project-top { display: flex; align-items: center; gap: 1rem; }
   .project-top-main { flex: 1 1 22rem; min-width: 0; }
   .project-top-split { margin-top: 0; flex: 0 1 24rem; min-width: 13rem; }
   .project-top-actions { order: 3; }
 }
 
-/* --- workspace layout ------------------------------------------------------
-   広い画面：エディタ ｜ プレビュー（主役・中央） ｜ 提案などのパネル の3カラム。
-   画面いっぱいに広げ、ページ自体はスクロールさせず各カラムの中だけを送る。
-   カラムの境目はドラッグで幅を変えられる（比率は端末に保存）。
-   狭い画面：1カラムに落として通常のページスクロールへ戻す。 */
+/* --- ワークスペースレイアウト強化 ----------------------------------------- */
 .workspace {
   display: grid;
   gap: 1rem;
@@ -348,7 +421,6 @@ textarea.field { resize: vertical; }
 .col-resizer { display: none; }
 
 @media (min-width: 1024px) {
-  /* ページ全体を画面の高さに固定し、スクロールはカラム内だけにする。 */
   body[data-app-view="project"] { overflow: hidden; }
   body[data-app-view="project"] .grid-noise {
     height: 100vh;
@@ -364,10 +436,6 @@ textarea.field { resize: vertical; }
     display: flex;
     flex-direction: column;
     padding-bottom: .75rem;
-    /* .grid-noise は縦方向のフレックスなので、main の mx-auto（cross軸のauto余白）が
-       stretch を打ち消し、幅が中身の max-content で決まってしまう。
-       すると提案バッジが増えた瞬間などにページ幅そのものが動く。
-       ここでは必ず全幅に固定する。 */
     width: 100%;
     align-self: stretch;
     margin-left: 0;
@@ -387,7 +455,6 @@ textarea.field { resize: vertical; }
     min-height: 0;
     gap: 0;
     padding-bottom: 0;
-    /* 既定は プレビューが最大、エディタが次、パネルが最小。 */
     grid-template-columns:
       minmax(15rem, var(--col-editor, 1fr))
       var(--gutter, .75rem)
@@ -395,7 +462,6 @@ textarea.field { resize: vertical; }
       var(--gutter, .75rem)
       minmax(14rem, var(--col-panel, .85fr));
   }
-  /* プレビューを隠すと、そのカラムと片方のハンドルが消えて3トラックになる。 */
   .workspace.no-preview {
     grid-template-columns:
       minmax(15rem, var(--col-editor, 1fr))
@@ -410,23 +476,18 @@ textarea.field { resize: vertical; }
     flex-direction: column;
     overflow: hidden;
   }
-  /* 各カラムで実際にスクロールする領域 */
   .workspace > section > #section-list,
   .workspace > section > .preview-doc,
   .workspace > section > .panel-body:not(.hidden) {
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
-    /* モードを変えて中身の高さが変わってもスクロールバーぶんの幅がずれない */
     scrollbar-gutter: stable;
   }
   .workspace #section-list { padding-right: .3rem; }
-  /* 3カラムではスクロールする器がカラムの中なので、貼り付き位置はその上端（0）。
-     パネルのタブはスクロール領域の外に出るため貼り付ける必要がない。 */
   .workspace .lyric-section-head { top: 0; }
   .workspace #panel-tabs { position: static; }
 
-  /* --- 幅調整ハンドル --- */
   .col-resizer {
     display: flex;
     align-items: center;
@@ -445,10 +506,9 @@ textarea.field { resize: vertical; }
   .col-resizer:hover > span,
   .col-resizer.is-dragging > span { background: var(--accent-bg); height: 5rem; }
 }
-/* ドラッグ中は選択が走らないようにする */
 body.is-resizing { user-select: none; cursor: col-resize; }
 
-/* 追従バー：縦に長いワンページでも、今の比率と現在地を見失わないための細い帯。 */
+/* --- ジャンプバー強化 ------------------------------------------------------ */
 .jump-bar {
   position: sticky;
   top: 0;
@@ -463,8 +523,8 @@ body.is-resizing { user-select: none; cursor: col-resize; }
   border: 1px solid var(--line-strong);
   border-radius: 999px;
   background: color-mix(in srgb, var(--surface) 88%, transparent);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
   box-shadow: var(--shadow-xs);
 }
 .jump-split { font-size: 11px; font-weight: 800; color: var(--text-strong); padding-left: .35rem; }
@@ -476,13 +536,13 @@ body.is-resizing { user-select: none; cursor: col-resize; }
   font-size: 11px;
   font-weight: 700;
   color: var(--text-muted);
-  transition: background-color .15s ease, color .15s ease, border-color .15s ease;
+  transition: var(--transition-smooth);
+  background: transparent;
+  cursor: pointer;
 }
 .jump-btn:hover { background: var(--surface-hover); color: var(--text-strong); border-color: var(--line-strong); }
-.jump-btn.is-current { background: var(--surface-strong); color: var(--text-strong); }
+.jump-btn.is-current { background: var(--surface-strong); color: var(--text-strong); box-shadow: inset 0 1px 2px rgba(0,0,0,0.05); }
 
-/* パネルのタブも貼り付けておくと、下までスクロールしたまま
-   提案 → コメント → ログ → 分析 を切り替えられる。 */
 #panel-tabs {
   position: sticky;
   top: calc(var(--bar-h, 2.4rem) + .5rem);
@@ -490,15 +550,13 @@ body.is-resizing { user-select: none; cursor: col-resize; }
   background: var(--surface);
 }
 
-/* --- preview ---------------------------------------------------------------
-   ワンページなので内部スクロールはさせず、歌詞は最後まで流して表示する。 */
+/* --- プレビュー強化 -------------------------------------------------------- */
 .preview-doc {
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-sm);
   background: var(--surface-muted);
   padding: 1rem 1.1rem;
 }
-/* 全幅に歌詞を流すと視線移動が長くなるので、読み幅だけ抑える。 */
 .preview-section { max-width: 42rem; }
 .preview-section + .preview-section { margin-top: 1.15rem; }
 .preview-section-name {
@@ -515,11 +573,11 @@ body.is-resizing { user-select: none; cursor: col-resize; }
   color: var(--text-body);
   white-space: pre-wrap;
   word-break: break-word;
+  transition: var(--transition-smooth);
 }
 .preview-line.is-authored { border-left: 2px solid var(--owner-color); padding-left: .55rem; margin-left: -.7rem; }
 .preview-line.is-added { color: var(--success); }
 .preview-line.is-removed { color: var(--danger); text-decoration: line-through; }
-/* 対案は段数ぶん字下げし、提案（実線・緑）とは別の色・破線の罫で見分ける。 */
 .preview-line.is-counter {
   color: var(--accent-b-text);
   margin-left: calc(var(--pv-depth, 1) * .9rem);
@@ -536,7 +594,6 @@ body.is-resizing { user-select: none; cursor: col-resize; }
   color: var(--text-faint);
   margin-left: .4rem;
 }
-/* プレビューに寄り添う未解決コメント。歌詞本文と混ざらないよう一段下げる。 */
 .preview-note {
   margin: .1rem 0 .35rem;
   margin-left: calc(var(--pv-depth, 0) * .9rem);
@@ -555,7 +612,6 @@ body.is-resizing { user-select: none; cursor: col-resize; }
   color: var(--text-strong);
   margin-right: .4rem;
 }
-/* 提案カードに書かれたコメント。行への指摘と混ざらないよう破線にする。 */
 .preview-note.is-on-suggestion { border-left-style: dashed; background: none; }
 
 .preview-stats {
@@ -569,15 +625,17 @@ body.is-resizing { user-select: none; cursor: col-resize; }
   color: var(--text-faint);
 }
 
-/* --- AI multi-stage analysis ---------------------------------------------- */
+/* --- AI多段階分析強化 ------------------------------------------------------ */
 .stage {
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-sm);
   background: var(--surface-muted);
   padding: .75rem .8rem;
+  transition: var(--transition-smooth);
 }
+.stage:hover { border-color: var(--hover-border); }
 .stage + .stage { margin-top: .5rem; }
-.stage.is-running { border-color: rgba(var(--accent-text-rgb), .5); }
+.stage.is-running { border-color: rgba(var(--accent-text-rgb), .5); box-shadow: 0 0 12px rgba(var(--accent-text-rgb), 0.08); }
 .stage.is-done { border-color: rgba(22, 163, 74, .35); }
 .stage.is-failed { border-color: rgba(var(--danger-rgb), .45); }
 .stage-head { display: flex; align-items: center; gap: .5rem; }
@@ -625,17 +683,20 @@ body.is-resizing { user-select: none; cursor: col-resize; }
   text-align: right;
 }
 .axis-track { height: .35rem; border-radius: 999px; background: var(--track-strong); overflow: hidden; display: flex; }
+.axis-track > div { transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
 
-/* --- 本人選択（端末ひも付け） ----------------------------------------------- */
-#identity-members .card { transition: border-color .15s ease, background-color .15s ease; }
-#identity-members .card:hover { border-color: var(--hover-border); }
+/* --- 本人選択強化 ---------------------------------------------------------- */
+#identity-members .card { transition: var(--transition-smooth); }
+#identity-members .card:hover { border-color: var(--hover-border); transform: translateY(-1px); }
 #identity-members .card.is-picked {
   border-color: rgba(var(--accent-text-rgb), .6);
   background: rgba(var(--accent-text-rgb), .07);
+  box-shadow: 0 0 0 1px rgba(var(--accent-text-rgb), .15);
 }
-#actor-alias { cursor: pointer; }
+#actor-alias { cursor: pointer; transition: var(--transition-smooth); }
+#actor-alias:hover { background: rgba(var(--danger-rgb), 0.1); }
 
-/* --- 同期ステータス --------------------------------------------------------- */
+/* --- 同期ステータス強化 ---------------------------------------------------- */
 .sync-pill {
   display: inline-flex;
   align-items: center;
@@ -647,20 +708,20 @@ body.is-resizing { user-select: none; cursor: col-resize; }
   font-weight: 600;
   color: var(--text-muted);
   white-space: nowrap;
-  transition: border-color .15s ease, color .15s ease;
+  transition: var(--transition-smooth);
+  background: transparent;
+  cursor: pointer;
 }
-.sync-pill:hover { color: var(--text-strong); border-color: var(--hover-border); }
-/* .sync-pill の display 指定が汎用の .hidden に勝ってしまうため、明示的に落とす。 */
+.sync-pill:hover { color: var(--text-strong); border-color: var(--hover-border); background: var(--surface-hover); }
 .sync-pill.hidden { display: none; }
-/* 狭い画面ではヘッダーが詰まるので状態ピルは省く（同期ボタンとトーストで足りる）。 */
 @media (max-width: 640px) { .sync-pill { display: none; } }
-.sync-dot { width: .45rem; height: .45rem; border-radius: 999px; background: var(--text-faint); flex-shrink: 0; }
-.sync-dot.is-on { background: var(--success); }
-.sync-dot.is-error { background: var(--danger); }
+.sync-dot { width: .45rem; height: .45rem; border-radius: 999px; background: var(--text-faint); flex-shrink: 0; transition: var(--transition-smooth); }
+.sync-dot.is-on { background: var(--success); box-shadow: 0 0 6px rgba(34, 197, 94, 0.4); }
+.sync-dot.is-error { background: var(--danger); box-shadow: 0 0 6px rgba(240, 112, 138, 0.4); }
 .sync-dot.is-busy { background: var(--warn); animation: ll-pulse 1s ease-in-out infinite; }
 @keyframes ll-pulse { 50% { opacity: .25; } }
 
-/* --- toast ---------------------------------------------------------------- */
+/* --- トースト強化 ---------------------------------------------------------- */
 .toast {
   position: fixed;
   left: 50%;
@@ -675,10 +736,22 @@ body.is-resizing { user-select: none; cursor: col-resize; }
   font-size: .8rem;
   font-weight: 600;
   color: var(--text-strong);
+  animation: toastIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.toast.hidden { display: none; }
+.toast.hidden { 
+  display: none; 
+  animation: toastOut 0.2s ease forwards;
+}
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+@keyframes toastOut {
+  from { opacity: 1; transform: translateX(-50%) translateY(0); }
+  to { opacity: 0; transform: translateX(-50%) translateY(10px); }
+}
 
-/* --- project strip -------------------------------------------------------- */
+/* --- プロジェクト行強化 ---------------------------------------------------- */
 .project-row {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -688,13 +761,13 @@ body.is-resizing { user-select: none; cursor: col-resize; }
   padding: 1rem 1.25rem;
   background: var(--surface);
   text-align: left;
-  transition: background-color .15s ease;
+  transition: var(--transition-smooth);
+  border-bottom: 1px solid var(--line-soft);
 }
-.project-row:hover { background: var(--surface-hover); }
+.project-row:last-child { border-bottom: none; }
+.project-row:hover { background: var(--surface-hover); transform: translateX(4px); }
 
-/* --- 追加ユーティリティ ---------------------------------------------------
-   styles.css の Tailwind ビルドは SPLITAPP で使われたクラスしか含まないため、
-   このアプリで新たに使うユーティリティだけをここで補う。 */
+/* --- 追加ユーティリティ --------------------------------------------------- */
 .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .text-2xl { font-size: 1.5rem; line-height: 2rem; }
 .h-2\.5 { height: .625rem; }
@@ -717,7 +790,7 @@ body.is-resizing { user-select: none; cursor: col-resize; }
   .lg\:grid-cols-\[1\.35fr_1fr\] { grid-template-columns: 1.35fr 1fr; }
 }
 
-/* --- help modal ----------------------------------------------------------- */
+/* --- ヘルプモーダル強化 ---------------------------------------------------- */
 .help-doc {
   max-height: 60vh;
   overflow-y: auto;
@@ -747,7 +820,7 @@ body.is-resizing { user-select: none; cursor: col-resize; }
 }
 .help-doc dd { margin: 0; padding-left: .1rem; }
 
-/* --- patch notes ---------------------------------------------------------- */
+/* --- パッチノート強化 ------------------------------------------------------ */
 .patch-btn { position: relative; }
 .patch-dot {
   position: absolute;
@@ -758,9 +831,9 @@ body.is-resizing { user-select: none; cursor: col-resize; }
   border-radius: 999px;
   background: var(--warn);
   box-shadow: 0 0 0 2px var(--surface);
+  animation: ll-pulse 2s ease-in-out infinite;
 }
 .patch-dot.hidden { display: none; }
-
 .patch-doc {
   max-height: 60vh;
   overflow-y: auto;
@@ -788,7 +861,7 @@ body.is-resizing { user-select: none; cursor: col-resize; }
 .patch-doc ul { margin-top: .5rem; padding-left: 1.1rem; list-style: disc; }
 .patch-doc li + li { margin-top: .2rem; }
 
-/* --- on/off switch -------------------------------------------------------- */
+/* --- ON/OFFスイッチ強化 ---------------------------------------------------- */
 .switch {
   display: inline-flex;
   align-items: center;
@@ -833,8 +906,7 @@ body.is-resizing { user-select: none; cursor: col-resize; }
 .switch-input:checked ~ .switch-label { color: var(--text-strong); }
 .switch-input:checked ~ .switch-off { color: var(--text-faint); }
 
-/* --- boot error ----------------------------------------------------------- */
-/* 起動に失敗したときだけ出る。テーマ変数が読めない場合も想定して素の色で書く。 */
+/* --- ブートエラー ---------------------------------------------------------- */
 .boot-error {
   position: fixed;
   left: 50%;
@@ -861,14 +933,11 @@ body.is-resizing { user-select: none; cursor: col-resize; }
   word-break: break-word;
 }
 
-/* --- auth gate ------------------------------------------------------------
-   認証まわりは既存のスタイルに触らず、この節だけで完結させている。
-   表示の出し分けは <html data-auth> の3状態だけを見る。 */
+/* --- 認証ゲート ------------------------------------------------------------ */
 #auth-checking, #auth-restoring, #auth-gate { display: none; }
 html[data-auth="checking"] #auth-checking { display: flex; }
 html[data-auth="restoring"] #auth-restoring { display: flex; }
 html[data-auth="out"] #auth-gate { display: flex; }
-/* 認証と接続の復元が済むまで本体を描かない（一瞬でも中身が見えないように） */
 html[data-auth="checking"] .grid-noise,
 html[data-auth="restoring"] .grid-noise,
 html[data-auth="out"] .grid-noise { display: none; }
@@ -934,7 +1003,7 @@ html[data-auth="out"] .grid-noise { display: none; }
 }
 .auth-error.hidden { display: none; }
 
-/* ヘッダーのアカウント表示 */
+/* ヘッダーアカウント表示 */
 .auth-user {
   display: inline-flex;
   align-items: center;
@@ -968,12 +1037,9 @@ html[data-auth="out"] .grid-noise { display: none; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* 狭い画面では名前を畳んで、アイコンとログアウトだけ残す */
-@media (max-width: 640px) {
-  .auth-user-name { display: none; }
-}
+@media (max-width: 640px) { .auth-user-name { display: none; } }
 
-/* 接続画面に出す、自動復元の結果 */
+/* --- 接続画面強化 ---------------------------------------------------------- */
 .connect-notice {
   margin-top: 1rem;
   padding: .6rem .75rem;
@@ -985,11 +1051,10 @@ html[data-auth="out"] .grid-noise { display: none; }
   color: var(--text-muted);
   white-space: pre-wrap;
 }
-/* Firestore側の不調は、Apps Scriptの接続失敗と色でも区別する。 */
 .connect-notice.is-firestore { border-color: rgba(var(--accent-b-rgb), .6); }
 .connect-notice.hidden { display: none; }
 
-/* --- workspaces (接続先) --------------------------------------------------- */
+/* --- ワークスペース強化 ---------------------------------------------------- */
 .ws-picker { margin-top: 1rem; text-align: left; }
 .ws-picker.hidden, .ws-manager.hidden { display: none; }
 .ws-manager {
@@ -1012,10 +1077,10 @@ html[data-auth="out"] .grid-noise { display: none; }
   border: 1px solid var(--line-strong);
   background: var(--surface);
   text-align: left;
-  transition: border-color .15s ease;
+  transition: var(--transition-smooth);
 }
-.ws-row:hover { border-color: var(--hover-border); }
-.ws-row.is-active { border-color: rgba(var(--accent-text-rgb), .6); }
+.ws-row:hover { border-color: var(--hover-border); transform: translateX(2px); }
+.ws-row.is-active { border-color: rgba(var(--accent-text-rgb), .6); background: rgba(var(--accent-text-rgb), .04); }
 .ws-row-label {
   flex: 1;
   min-width: 0;
@@ -1048,7 +1113,7 @@ html[data-auth="out"] .grid-noise { display: none; }
   text-align: center;
 }
 
-/* 名前は一度決めたら固定。修正中だけ入力できる。 */
+/* --- 名前固定表示 ---------------------------------------------------------- */
 .field.is-locked {
   background: var(--surface-muted);
   color: var(--text-muted);
@@ -1057,7 +1122,7 @@ html[data-auth="out"] .grid-noise { display: none; }
 .member-note { margin-top: .45rem; font-size: 10px; line-height: 1.7; color: var(--text-faint); }
 .member-note.hidden { display: none; }
 
-/* --- boot progress -------------------------------------------------------- */
+/* --- ブート進捗強化 -------------------------------------------------------- */
 .boot-box { width: min(20rem, 100%); text-align: center; }
 .boot-head {
   display: flex;
@@ -1086,6 +1151,362 @@ html[data-auth="out"] .grid-noise { display: none; }
   height: 100%;
   width: 0;
   border-radius: 999px;
-  background: var(--accent-text);
+  background: linear-gradient(90deg, var(--accent-bg), var(--accent-text));
   transition: width .35s ease;
+}
+
+/* ==========================================================================
+   【新機能】韻（ライム）検出・ハイライト
+   ========================================================================== */
+.rhyme-highlight {
+  background: linear-gradient(180deg, transparent 60%, rgba(var(--accent-text-rgb), 0.18) 60%);
+  border-radius: 2px;
+  padding: 0 1px;
+  transition: var(--transition-smooth);
+}
+.rhyme-highlight.rhyme-a { background: linear-gradient(180deg, transparent 60%, rgba(199, 255, 61, 0.22) 60%); }
+.rhyme-highlight.rhyme-b { background: linear-gradient(180deg, transparent 60%, rgba(139, 92, 246, 0.22) 60%); }
+.rhyme-highlight.rhyme-c { background: linear-gradient(180deg, transparent 60%, rgba(251, 191, 36, 0.22) 60%); }
+.rhyme-highlight.rhyme-d { background: linear-gradient(180deg, transparent 60%, rgba(240, 112, 138, 0.22) 60%); }
+.rhyme-highlight.rhyme-e { background: linear-gradient(180deg, transparent 60%, rgba(56, 189, 248, 0.22) 60%); }
+
+.rhyme-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+  margin-top: .4rem;
+  font-size: 10px;
+}
+.rhyme-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  padding: .15rem .4rem;
+  border-radius: 999px;
+  border: 1px solid var(--line-soft);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}
+.rhyme-legend-dot {
+  width: .5rem;
+  height: .5rem;
+  border-radius: 999px;
+}
+
+/* ==========================================================================
+   【新機能】文字数カウンター
+   ========================================================================== */
+.char-counter {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .2rem .5rem;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  border: 1px solid var(--line-soft);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+  color: var(--text-faint);
+  transition: var(--transition-smooth);
+}
+.char-counter.is-near-limit { border-color: var(--warn); color: var(--warn); background: rgba(251, 191, 36, 0.08); }
+.char-counter.is-over-limit { border-color: var(--danger); color: var(--danger); background: rgba(240, 112, 138, 0.08); }
+.char-counter-bar {
+  width: 2rem;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--track-strong);
+  overflow: hidden;
+}
+.char-counter-bar > div {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent-text);
+  transition: width 0.3s ease;
+}
+.char-counter.is-near-limit .char-counter-bar > div { background: var(--warn); }
+.char-counter.is-over-limit .char-counter-bar > div { background: var(--danger); }
+
+/* ==========================================================================
+   【新機能】セッションタイマー
+   ========================================================================== */
+.session-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .25rem .6rem;
+  border-radius: 999px;
+  background: rgba(var(--accent-text-rgb), 0.08);
+  border: 1px solid rgba(var(--accent-text-rgb), 0.2);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--accent-text);
+  animation: timerPulse 3s ease-in-out infinite;
+}
+@keyframes timerPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(var(--accent-text-rgb), 0.1); }
+  50% { box-shadow: 0 0 0 4px rgba(var(--accent-text-rgb), 0); }
+}
+.session-timer.is-paused {
+  animation: none;
+  opacity: 0.6;
+  border-style: dashed;
+}
+
+/* ==========================================================================
+   【新機能】通知センター
+   ========================================================================== */
+.notification-center {
+  position: fixed;
+  top: 3.5rem;
+  right: 1rem;
+  z-index: 55;
+  width: min(22rem, calc(100vw - 2rem));
+  max-height: 70vh;
+  overflow-y: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+  padding: .75rem;
+  animation: notifIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.notification-center.hidden { display: none; }
+@keyframes notifIn {
+  from { opacity: 0; transform: translateY(-8px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.notification-item {
+  display: flex;
+  align-items: flex-start;
+  gap: .5rem;
+  padding: .5rem;
+  border-radius: var(--radius-sm);
+  transition: var(--transition-smooth);
+}
+.notification-item:hover { background: var(--surface-hover); }
+.notification-item + .notification-item { border-top: 1px solid var(--line-soft); margin-top: .25rem; }
+.notification-dot {
+  width: .4rem;
+  height: .4rem;
+  border-radius: 999px;
+  background: var(--accent-text);
+  margin-top: .35rem;
+  flex-shrink: 0;
+}
+.notification-dot.is-read { background: var(--track-strong); }
+.notification-text { font-size: 11px; line-height: 1.5; color: var(--text-muted); flex: 1; }
+.notification-text b { color: var(--text-strong); }
+.notification-time { font-size: 9px; color: var(--text-faint); flex-shrink: 0; margin-top: .15rem; }
+
+/* ==========================================================================
+   【新機能】ドラフト比較ビュー
+   ========================================================================== */
+.diff-view {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .75rem;
+}
+.diff-view-col {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+  padding: .75rem;
+}
+.diff-view-col.is-old { border-color: rgba(var(--danger-rgb), 0.3); }
+.diff-view-col.is-new { border-color: rgba(var(--success), 0.3); }
+.diff-view-header {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: .5rem;
+  padding-bottom: .35rem;
+  border-bottom: 1px solid var(--line-soft);
+}
+.diff-line {
+  font-size: .85rem;
+  line-height: 1.7;
+  padding: .15rem .3rem;
+  border-radius: 3px;
+  transition: var(--transition-smooth);
+}
+.diff-line.is-added { background: rgba(34, 197, 94, 0.1); color: var(--success); }
+.diff-line.is-removed { background: rgba(240, 112, 138, 0.1); color: var(--danger); text-decoration: line-through; }
+.diff-line.is-changed { background: rgba(var(--accent-text-rgb), 0.08); }
+
+/* ==========================================================================
+   【新機能】メロディラインインジケータ
+   ========================================================================== */
+.melody-indicator {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 1.5rem;
+  padding: .2rem .4rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+  border: 1px solid var(--line-soft);
+}
+.melody-bar {
+  width: 3px;
+  border-radius: 999px;
+  background: var(--accent-text);
+  opacity: 0.6;
+  transition: height 0.3s ease;
+}
+.melody-bar.is-high { background: var(--accent-bg); opacity: 0.9; }
+.melody-bar.is-low { background: var(--accent-b-text); opacity: 0.4; }
+
+/* ==========================================================================
+   【新機能】韻律パターン表示
+   ========================================================================== */
+.syllable-pattern {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: .15rem;
+  padding-left: 2.1rem;
+}
+.syllable-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--track-strong);
+}
+.syllable-dot.is-stressed { background: var(--accent-text); transform: scale(1.3); }
+.syllable-count {
+  margin-left: .35rem;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 8px;
+  color: var(--text-faint);
+}
+
+/* ==========================================================================
+   【新機能】タグ・キーワード管理
+   ========================================================================== */
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+  margin-top: .4rem;
+}
+.tag-item {
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  padding: .2rem .5rem;
+  border-radius: 999px;
+  background: rgba(var(--accent-text-rgb), 0.08);
+  border: 1px solid rgba(var(--accent-text-rgb), 0.2);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent-text);
+  transition: var(--transition-smooth);
+}
+.tag-item:hover { background: rgba(var(--accent-text-rgb), 0.15); transform: translateY(-1px); }
+.tag-remove {
+  width: .9rem;
+  height: .9rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  font-size: 10px;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+.tag-remove:hover { background: rgba(var(--danger-rgb), 0.15); color: var(--danger); }
+.tag-input {
+  background: transparent;
+  border: none;
+  border-bottom: 1px dashed var(--line-strong);
+  color: var(--text-strong);
+  font-size: 10px;
+  padding: .2rem;
+  min-width: 4rem;
+  outline: none;
+}
+.tag-input:focus { border-bottom-color: var(--accent-text); }
+
+/* ==========================================================================
+   【新機能】フローティングアクションボタン
+   ========================================================================== */
+.fab {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  z-index: 40;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--accent-on);
+  border: none;
+  box-shadow: 0 4px 16px rgba(var(--accent-text-rgb), 0.35), 0 0 0 1px rgba(var(--accent-text-rgb), 0.2);
+  display: grid;
+  place-items: center;
+  font-size: 1.25rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+.fab:hover {
+  transform: scale(1.08) translateY(-2px);
+  box-shadow: 0 6px 24px rgba(var(--accent-text-rgb), 0.45), 0 0 0 2px rgba(var(--accent-text-rgb), 0.3);
+}
+.fab:active { transform: scale(0.96); }
+
+/* --- ダッシュボード統計強化 ------------------------------------------------ */
+.stat-card {
+  transition: var(--transition-smooth);
+  position: relative;
+  overflow: hidden;
+}
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent-bg), var(--accent-b));
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.stat-card:hover::before { opacity: 1; }
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-elevated);
+}
+
+/* --- リストアニメーション -------------------------------------------------- */
+@keyframes listItemIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.lyric-section { animation: listItemIn 0.3s ease backwards; }
+.lyric-section:nth-child(1) { animation-delay: 0s; }
+.lyric-section:nth-child(2) { animation-delay: 0.05s; }
+.lyric-section:nth-child(3) { animation-delay: 0.1s; }
+.lyric-section:nth-child(4) { animation-delay: 0.15s; }
+.lyric-section:nth-child(5) { animation-delay: 0.2s; }
+
+/* --- スクロールバー強化 ---------------------------------------------------- */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background-color: var(--track-strong);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: var(--hover-border); }
+
+/* --- 選択テキスト強化 ------------------------------------------------------ */
+::selection {
+  background: rgba(var(--accent-text-rgb), 0.25);
+  color: var(--text-strong);
 }
